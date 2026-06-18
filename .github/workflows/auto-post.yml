@@ -1,0 +1,29 @@
+name: Auto Facebook Post
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # প্রতি ৬ ঘণ্টায় অটো চলবে
+  workflow_dispatch: {}   # ম্যানুয়ালি টেস্ট রান করার বাটন দেবে
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate image, caption & post to Facebook
+        env:
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          TOPIC: ${{ secrets.TOPIC }}
+          STYLE: ${{ secrets.STYLE }}
+        run: python post_to_facebook.py
