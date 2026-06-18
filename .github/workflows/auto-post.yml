@@ -26,13 +26,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          # ফাইলটি চেক করে ইন্সটল করবে
           if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
-          # অতিরিক্ত নিশ্চয়তার জন্য moviepy ইন্সটল করা
-          python -m pip install moviepy==1.0.3
 
       - name: Generate image, caption & post to Facebook
         env:
