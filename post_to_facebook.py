@@ -1,17 +1,15 @@
 """
-Hugging Face Hub API এবং Pollinations AI ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
-৪২৯ (Too Many Requests) রেট-লিমিট এরর ফিক্স করা সংস্করণ।
+Hugging Face Hub API ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
+Pollinations AI-এর ৪২৯ এরর এড়াতে সম্পূর্ণ প্রসেস Hugging Face Hub-এ স্থানান্তরিত।
 """
 
 import os
 import random
 import sys
 import time
-import urllib.parse
 import requests
 from huggingface_hub import InferenceClient
 
-POLLINATIONS_TEXT_URL = "https://text.pollinations.ai/"
 FB_GRAPH_API = "https://graph.facebook.com/v21.0"
 
 ANGLE_HINTS = [
@@ -27,30 +25,31 @@ ANGLE_HINTS = [
     "with a minimalist, clean aesthetic",
 ]
 
-def safe_text_request(url: str, max_retries: int = 3, delay: int = 5) -> requests.Response:
-    """টেক্সট/ক্যাপশন জেনারেটরের জন্য রিট্রাই মেকানিজম।"""
-    for attempt in range(max_retries):
+def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 150) -> str:
+    """Hugging Face-এর শক্তিশালী লার্জ ল্যাঙ্গুয়েজ মডেল ব্যবহার করে টেক্সট জেনারেট করার সেফ ফাংশন।"""
+    # টেক্সট জেনারেশনের জন্য একটি অত্যন্ত স্টেবল ও ফাস্ট ফ্রি মডেল
+    text_model = "Qwen/Qwen2.5-72B-Instruct"
+    
+    for attempt in range(3):
         try:
-            resp = requests.get(url, timeout=90)
-            
-            # যদি সার্ভার ৪২৯ (Too Many Requests) দেয়, তবে একটু বেশি সময় অপেক্ষা করে আবার চেষ্টা করবে
-            if resp.status_code == 429:
-                print(f"⚠️ সার্ভার ব্যস্ত (429)! ১৫ সেকেন্ড অপেক্ষা করে আবার চেষ্টা করা হচ্ছে (চেষ্টা {attempt + 1})...")
-                time.sleep(15)
-                continue
-                
-            resp.raise_for_status()
-            return resp
+            messages = [{"role": "user", "content": instruction}]
+            response = client.chat_completion(
+                model=text_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.7
+            )
+            result = response.choices[0].message.content
+            if result:
+                return result.strip()
         except Exception as e:
-            print(f"⚠️ টেক্সট সার্ভার এরর (চেষ্টা {attempt + 1}): {e}. আবার চেষ্টা করা হচ্ছে...")
-            if attempt < max_retries - 1:
-                time.sleep(delay)
-            else:
-                raise e
+            print(f"⚠️ HF টেক্সট মডেল এরর (চেষ্টা {attempt + 1}): {e}")
+            time.sleep(10)
+    raise RuntimeError("Hugging Face টেক্সট সার্ভার থেকে রেসপন্স পাওয়া যায়নি।")
 
-def auto_generate_topic() -> str:
-    """AI ব্যবহার করে সম্পূর্ণ নিজে থেকে একটি নতুন এবং অনন্য ঐতিহাসিক টপিক তৈরি করে।"""
-    print("🔍 AI-এর কাছ থেকে নতুন ইউনিক টপিক ID নেওয়া হচ্ছে...")
+def auto_generate_topic(client: InferenceClient) -> str:
+    """Hugging Face AI ব্যবহার করে নিজে থেকে একটি নতুন এবং অনন্য ঐতিহাসিক টপিক তৈরি করে।"""
+    print("🔍 Hugging Face AI-এর কাছ থেকে নতুন ইউনিক টপিক আইডিয়া নেওয়া হচ্ছে...")
     
     categories = [
         "Ancient Lost Civilization", "Mysterious Historical Event", 
@@ -65,16 +64,12 @@ def auto_generate_topic() -> str:
         "no quotes, no intro, no explanation."
     )
     
-    try:
-        url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
-        resp = safe_text_request(url)
-        topic = resp.text.strip().strip('"').strip("'")
-        return topic or "Mysterious Ancient Civilization"
-    except Exception:
-        return "Ancient Lost City and Architectural Wonder"
+    topic = get_hf_text(client, instruction, max_tokens=50)
+    return topic or "Mysterious Ancient Civilization"
 
-def generate_prompt(topic: str, style: str) -> str:
-    """অটো-জেনারেটেড টপিক থেকে AI দিয়ে একটি চমৎকার ছবির prompt বানায়।"""
+def generate_prompt(client: InferenceClient, topic: str, style: str) -> str:
+    """টপিক থেকে AI দিয়ে একটি চমৎকার ছবির prompt বানায়।"""
+    print("🚀 প্রম্পট টেক্সট জেনারেট করা হচ্ছে...")
     hint = random.choice(ANGLE_HINTS)
     instruction = (
         "You generate image-generation prompts. Output exactly ONE creative, "
@@ -82,35 +77,31 @@ def generate_prompt(topic: str, style: str) -> str:
         f'the topic "{topic}", {hint}. Output ONLY the prompt text itself, '
         "nothing else, no quotes, no numbering."
     )
-    url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
-    resp = safe_text_request(url)
-    prompt = resp.text.strip()
+    prompt = get_hf_text(client, instruction, max_tokens=150)
     if not prompt:
         raise RuntimeError("AI prompt তৈরি করতে ব্যর্থ হয়েছে")
     if style:
         prompt = f"{prompt}, {style}"
     return prompt
 
-def generate_caption(prompt_text: str) -> str:
-    """ছবির prompt থেকে একটা বাংলা Facebook caption বানায়। (Gemini ইমোজি মুক্ত সংস্করণ)"""
+def generate_caption(client: InferenceClient, prompt_text: str) -> str:
+    """ছবির prompt থেকে একটা বাংলা Facebook caption বানায়।"""
+    print("📝 বাংলা ক্যাপশন তৈরি করা হচ্ছে...")
     instruction = (
         "Write exactly one short, catchy Facebook caption in Bengali (with 1-2 "
         f'relevant historical/art emojis like 📜, 🏛️, 🎨) for an AI-generated image described as: "{prompt_text}". '
-        "Output only the caption text, nothing else. Do not use sparkle symbols."
+        "Output only the caption text, nothing else. Do not use sparkle symbols like ✨."
     )
     try:
-        url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
-        resp = safe_text_request(url, max_retries=2, delay=3)
-        caption = resp.text.strip()
-        caption = caption.replace("✨", "📜").replace("❇️", "🏛️")
+        caption = get_hf_text(client, instruction, max_tokens=100)
+        caption = caption.replace("✨", "📜").replace("❇️", "🏛️").strip('"').strip("'")
         return caption or "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
     except Exception:
         return "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
 
-def generate_image_hf_official(prompt_text: str, hf_token: str) -> bytes:
-    """Hugging Face Hub লাইব্রেরি ব্যবহার করে ছবি জেনারেট করে।"""
-    print("🎨 Hugging Face অফিসিয়াল ক্লায়েন্ট দিয়ে ছবি জেনারেট করা হচ্ছে...")
-    client = InferenceClient(token=hf_token)
+def generate_image_hf_official(client: InferenceClient, prompt_text: str) -> bytes:
+    """Hugging Face Hub লাইব্রেরি ব্যবহার করে FLUX ছবি জেনارهট করে।"""
+    print("🎨 Hugging Face FLUX মডেল দিয়ে ছবি জেনারেট করা হচ্ছে...")
     
     for attempt in range(3):
         try:
@@ -157,27 +148,23 @@ def main():
         print("❌ প্রোজেক্টের প্রয়েজনীয় টোকেনগুলো (FB বা HF) সেট করা নেই। GitHub Secrets চেক করুন।")
         sys.exit(1)
 
-    # ১. টপিক জেনারেট করা
-    topic = auto_generate_topic()
+    # একবারে একটি অফিসিয়াল ক্লায়েন্ট ইনিশিয়েলাইজ করা হলো যা সব জায়গায় কাজ করবে
+    client = InferenceClient(token=hf_token)
+
+    # ১. টপিক জেনারেট করা (এখন থেকে ১০০% সুরক্ষিত HF মডেলে)
+    topic = auto_generate_topic(client)
     print(f"🏷️  AI জেনারেটেড নতুন টপিক: {topic}")
 
-    # ⏳ রেট-লিমিট (429) এড়ানোর জন্য ১০ সেকেন্ডের একটি সেফটি বিরতি
-    print("⏳ সার্ভার ওভারলোড এড়াতে ১০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
-    time.sleep(10)
-
     # ২. প্রম্পট জেনারেট করা
-    prompt = generate_prompt(topic, style)
+    prompt = generate_prompt(client, topic, style)
     print(f"🚀 প্রম্পট রেডি: {prompt}")
 
-    # ⏳ ক্যাপশন বানানোর আগে আরেকটি ছোট ৫ সেকেন্ডের বিরতি
-    time.sleep(5)
-
     # ৩. ক্যাপশন জেনারেট করা
-    caption = generate_caption(prompt)
+    caption = generate_caption(client, prompt)
     print(f"📝 ক্যাপশন রেডি: {caption}")
 
     # ৪. ইমেজ জেনারেশন
-    image_bytes = generate_image_hf_official(prompt, hf_token)
+    image_bytes = generate_image_hf_official(client, prompt)
     print(f"✅ ছবি সফলভাবে জেনারেট হয়েছে ({len(image_bytes)} bytes)")
 
     # ৫. ফেসবুকে পোস্ট
