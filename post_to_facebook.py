@@ -1,6 +1,6 @@
 """
-Hugging FaceHub API এবং Pollinations AI ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
-টপিক জেনারেশন ও ক্যাপশন সিস্টেম সম্পূর্ণ আপডেটেড।
+Hugging Face Hub API এবং Pollinations AI ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
+৪২৯ (Too Many Requests) রেট-লিমিট এরর ফিক্স করা সংস্করণ।
 """
 
 import os
@@ -32,6 +32,13 @@ def safe_text_request(url: str, max_retries: int = 3, delay: int = 5) -> request
     for attempt in range(max_retries):
         try:
             resp = requests.get(url, timeout=90)
+            
+            # যদি সার্ভার ৪২৯ (Too Many Requests) দেয়, তবে একটু বেশি সময় অপেক্ষা করে আবার চেষ্টা করবে
+            if resp.status_code == 429:
+                print(f"⚠️ সার্ভার ব্যস্ত (429)! ১৫ সেকেন্ড অপেক্ষা করে আবার চেষ্টা করা হচ্ছে (চেষ্টা {attempt + 1})...")
+                time.sleep(15)
+                continue
+                
             resp.raise_for_status()
             return resp
         except Exception as e:
@@ -43,7 +50,7 @@ def safe_text_request(url: str, max_retries: int = 3, delay: int = 5) -> request
 
 def auto_generate_topic() -> str:
     """AI ব্যবহার করে সম্পূর্ণ নিজে থেকে একটি নতুন এবং অনন্য ঐতিহাসিক টপিক তৈরি করে।"""
-    print("🔍 AI-এর কাছ থেকে নতুন ইউনিক টপিক আইডিয়া নেওয়া হচ্ছে...")
+    print("🔍 AI-এর কাছ থেকে নতুন ইউনিক টপিক ID নেওয়া হচ্ছে...")
     
     categories = [
         "Ancient Lost Civilization", "Mysterious Historical Event", 
@@ -95,11 +102,9 @@ def generate_caption(prompt_text: str) -> str:
         url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
         resp = safe_text_request(url, max_retries=2, delay=3)
         caption = resp.text.strip()
-        # যদি এআই ভুল করে জেমিনি বা স্পার্কল ইমোজি দিয়েও ফেলে, তা এখানে ফিল্টার হয়ে যাবে
         caption = caption.replace("✨", "📜").replace("❇️", "🏛️")
         return caption or "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
     except Exception:
-        # ব্যাকআপ ডিফল্ট ক্যাপশন (এখান থেকেও ✨ সরিয়ে দেওয়া হয়েছে)
         return "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
 
 def generate_image_hf_official(prompt_text: str, hf_token: str) -> bytes:
@@ -152,18 +157,30 @@ def main():
         print("❌ প্রোজেক্টের প্রয়েজনীয় টোকেনগুলো (FB বা HF) সেট করা নেই। GitHub Secrets চেক করুন।")
         sys.exit(1)
 
+    # ১. টপিক জেনারেট করা
     topic = auto_generate_topic()
     print(f"🏷️  AI জেনারেটেড নতুন টপিক: {topic}")
 
+    # ⏳ রেট-লিমিট (429) এড়ানোর জন্য ১০ সেকেন্ডের একটি সেফটি বিরতি
+    print("⏳ সার্ভার ওভারলোড এড়াতে ১০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
+    time.sleep(10)
+
+    # ২. প্রম্পট জেনারেট করা
     prompt = generate_prompt(topic, style)
     print(f"🚀 প্রম্পট রেডি: {prompt}")
 
+    # ⏳ ক্যাপশন বানানোর আগে আরেকটি ছোট ৫ সেকেন্ডের বিরতি
+    time.sleep(5)
+
+    # ৩. ক্যাপশন জেনারেট করা
     caption = generate_caption(prompt)
     print(f"📝 ক্যাপশন রেডি: {caption}")
 
+    # ৪. ইমেজ জেনারেশন
     image_bytes = generate_image_hf_official(prompt, hf_token)
     print(f"✅ ছবি সফলভাবে জেনারেট হয়েছে ({len(image_bytes)} bytes)")
 
+    # ৫. ফেসবুকে পোস্ট
     print("📘 Facebook-এ পোস্ট করা হচ্ছে...")
     success, result = post_to_facebook(image_bytes, caption, fb_token, fb_page_id)
 
