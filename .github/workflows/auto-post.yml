@@ -2,7 +2,7 @@ name: Auto Facebook Post
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # প্রতি ৬ ঘণ্টায় অটো চলবে
+    - cron: '0 * * * *' # প্রতি ১ ঘণ্টায় অটো চলবে
   workflow_dispatch: {}   # ম্যানুয়ালি টেস্ট রান করার বাটন দেবে
 
 jobs:
