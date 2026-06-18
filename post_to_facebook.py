@@ -1,12 +1,13 @@
 """
 Hugging Face Hub API ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
-Pollinations AI-এর ৪২৯ এরর এড়াতে সম্পূর্ণ প্রসেস Hugging Face Hub-এ স্থানান্তরিত।
+Pollinations AI-এর ৪২৯ এরর এড়াতে সম্পূর্ণ প্রসেস Hugging Face Hub-এ স্থানান্তরিত।
 """
 
 import os
 import random
 import sys
 import time
+import io  # ইম্পোর্ট উপরে নিয়ে আসা হলো
 import requests
 from huggingface_hub import InferenceClient
 
@@ -26,8 +27,7 @@ ANGLE_HINTS = [
 ]
 
 def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 150) -> str:
-    """Hugging Face-এর শক্তিশালী লার্জ ল্যাঙ্গুয়েজ মডেল ব্যবহার করে টেক্সট জেনারেট করার সেফ ফাংশন।"""
-    # টেক্সট জেনারেশনের জন্য একটি অত্যন্ত স্টেবল ও ফাস্ট ফ্রি মডেল
+    """Hugging Face-এর শক্তিশালী লার্জ ল্যাঙ্গুয়েজ মডেল ব্যবহার করে টেক্সট জেনারেট করার সেফ ফাংশন।"""
     text_model = "Qwen/Qwen2.5-72B-Instruct"
     
     for attempt in range(3):
@@ -45,7 +45,7 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 150
         except Exception as e:
             print(f"⚠️ HF টেক্সট মডেল এরর (চেষ্টা {attempt + 1}): {e}")
             time.sleep(10)
-    raise RuntimeError("Hugging Face টেক্সট সার্ভার থেকে রেসপন্স পাওয়া যায়নি।")
+    raise RuntimeError("Hugging Face টেক্সট সার্ভার থেকে রেসপন্স পাওয়া যায়নি।")
 
 def auto_generate_topic(client: InferenceClient) -> str:
     """Hugging Face AI ব্যবহার করে নিজে থেকে একটি নতুন এবং অনন্য ঐতিহাসিক টপিক তৈরি করে।"""
@@ -95,13 +95,13 @@ def generate_caption(client: InferenceClient, prompt_text: str) -> str:
     try:
         caption = get_hf_text(client, instruction, max_tokens=100)
         caption = caption.replace("✨", "📜").replace("❇️", "🏛️").strip('"').strip("'")
-        return caption or "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
+        return caption or "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
     except Exception:
-        return "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
+        return "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
 
 def generate_image_hf_official(client: InferenceClient, prompt_text: str) -> bytes:
-    """Hugging Face Hub লাইব্রেরি ব্যবহার করে FLUX ছবি জেনارهট করে।"""
-    print("🎨 Hugging Face FLUX মডেল দিয়ে ছবি জেনারেট করা হচ্ছে...")
+    """Hugging Face Hub লাইব্রেরি ব্যবহার করে FLUX ছবি জেনারেট করে।"""
+    print("🎨 Hugging Face FLUX মডেল দিয়ে ছবি জেনারেট করা হচ্ছে...")
     
     for attempt in range(3):
         try:
@@ -110,7 +110,6 @@ def generate_image_hf_official(client: InferenceClient, prompt_text: str) -> byt
                 model="black-forest-labs/FLUX.1-schnell"
             )
             
-            import io
             img_byte_arr = io.BytesIO()
             image.save(img_byte_arr, format='JPEG')
             return img_byte_arr.getvalue()
@@ -127,16 +126,19 @@ def generate_image_hf_official(client: InferenceClient, prompt_text: str) -> byt
     raise RuntimeError("Hugging Face ক্লায়েন্ট থেকে ছবি জেনারেট করা সম্ভব হয়নি।")
 
 def post_to_facebook(image_bytes: bytes, caption: str, token: str, page_id: str):
-    """ছবি Facebook Page-এ পোস্ট করে।"""
+    """ছবি Facebook Page-এ পোস্ট করে (নিরাপদ এরর হ্যান্ডলিং সহ)।"""
     url = f"{FB_GRAPH_API}/{page_id}/photos"
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
     data = {"message": caption, "access_token": token}
     
-    resp = requests.post(url, data=data, files=files, timeout=90)
-    result = resp.json()
-    if "id" in result:
-        return True, result["id"]
-    return False, result.get("error", {}).get("message", "অজানা ফেসবুক এরর")
+    try:
+        resp = requests.post(url, data=data, files=files, timeout=90)
+        result = resp.json()
+        if "id" in result:
+            return True, result["id"]
+        return False, result.get("error", {}).get("message", "অজানা ফেসবুক এরর")
+    except Exception as network_error:
+        return False, f"ফেসবুক সার্ভার কানেকশন এরর: {network_error}"
 
 def main():
     style = os.environ.get("STYLE", "").strip()
@@ -148,10 +150,9 @@ def main():
         print("❌ প্রোজেক্টের প্রয়েজনীয় টোকেনগুলো (FB বা HF) সেট করা নেই। GitHub Secrets চেক করুন।")
         sys.exit(1)
 
-    # একবারে একটি অফিসিয়াল ক্লায়েন্ট ইনিশিয়েলাইজ করা হলো যা সব জায়গায় কাজ করবে
     client = InferenceClient(token=hf_token)
 
-    # ১. টপিক জেনারেট করা (এখন থেকে ১০০% সুরক্ষিত HF মডেলে)
+    # ১. টপিক জেনারেট করা
     topic = auto_generate_topic(client)
     print(f"🏷️  AI জেনারেটেড নতুন টপিক: {topic}")
 
