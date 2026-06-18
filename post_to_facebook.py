@@ -1,5 +1,6 @@
 """
-Hugging Face Hub API ব্যবহার করে AI ছবি জেনারেট ও Facebook Page-এ অটো-পোস্ট করার স্ক্রিপ্ট।
+Hugging Face API এবং Pollinations AI ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
+এখন এটি নিজে থেকে প্রতিদিন নতুন নতুন ইউনিক টপিক খুঁজে বের করবে!
 """
 
 import os
@@ -26,20 +27,6 @@ ANGLE_HINTS = [
     "with a minimalist, clean aesthetic",
 ]
 
-HISTORICAL_TOPICS = [
-    "Historical Place in the World",
-    "Ancient Wonders of the World",
-    "Mysterious Lost Cities in History",
-    "Medieval Castles and Fortresses",
-    "Ancient Roman and Greek Architecture",
-    "UNESCO World Heritage Sites",
-    "Ancient Egyptian Temples and Pharaoh Heritage",
-    "Mughal Architecture and Historic Forts",
-    "Legendary Mythological Kingdoms",
-    "Ancient European Gothic Cathedrals",
-    "If Ancient Civilizations Never Died",
-]
-
 def safe_text_request(url: str, max_retries: int = 3, delay: int = 5) -> requests.Response:
     """টেক্সট/ক্যাপশন জেনারেটরের জন্য রিট্রাই মেকানিজম।"""
     for attempt in range(max_retries):
@@ -54,8 +41,34 @@ def safe_text_request(url: str, max_retries: int = 3, delay: int = 5) -> request
             else:
                 raise e
 
+def auto_generate_topic() -> str:
+    """AI ব্যবহার করে সম্পূর্ণ নিজে থেকে একটি নতুন এবং অনন্য ঐতিহাসিক টপিক তৈরি করে।"""
+    print("🔍 AI-এর কাছ থেকে নতুন ইউনিক টপিক আইডিয়া নেওয়া হচ্ছে...")
+    
+    # এআই-কে ভিন্ন ভিন্ন আইডিয়া দেওয়ার জন্য কিছু ক্যাটাগরি র‍্যান্ডমলি সিলেক্ট করা
+    categories = [
+        "Ancient Lost Civilization", "Mysterious Historical Event", 
+        "Architectural Wonder of the Past", "Mythological Kingdom", 
+        "Medieval Secret Castle", "Historical Underwater Ruins"
+    ]
+    chosen_cat = random.choice(categories)
+    
+    instruction = (
+        f"Give me exactly one interesting, specific, and unique image idea/topic about a '{chosen_cat}'. "
+        "It should be suitable for creating a stunning visual. Output ONLY the topic name in one short sentence, "
+        "no quotes, no intro, no explanation."
+    )
+    
+    try:
+        url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
+        resp = safe_text_request(url)
+        topic = resp.text.strip().strip('"').strip("'")
+        return topic or "Mysterious Ancient Civilization"
+    except Exception:
+        return "Ancient Lost City and Architectural Wonder"
+
 def generate_prompt(topic: str, style: str) -> str:
-    """টপিক থেকে AI দিয়ে একটা নতুন ছবির prompt বানায়।"""
+    """অটো-জেনারেটেড টপিক থেকে AI দিয়ে একটি চমৎকার ছবির prompt বানায়।"""
     hint = random.choice(ANGLE_HINTS)
     instruction = (
         "You generate image-generation prompts. Output exactly ONE creative, "
@@ -87,21 +100,17 @@ def generate_caption(prompt_text: str) -> str:
         return "✨ AI ছবি"
 
 def generate_image_hf_official(prompt_text: str, hf_token: str) -> bytes:
-    """Hugging Face Hub লাইব্রেরি ব্যবহার করে সুরক্ষিত উপায়ে ছবি জেনারেট করে।"""
+    """Hugging Face Hub লাইব্রেরি ব্যবহার করে ছবি জেনারেট করে।"""
     print("🎨 Hugging Face অফিসিয়াল ক্লায়েন্ট দিয়ে ছবি জেনারেট করা হচ্ছে...")
-    
-    # ক্লায়েন্ট ইনিশিয়েলাইজেশন
     client = InferenceClient(token=hf_token)
     
     for attempt in range(3):
         try:
-            # FLUX.1-schnell মডেল ব্যবহার করে ইমেজ জেনারেশন
             image = client.text_to_image(
                 prompt_text, 
                 model="black-forest-labs/FLUX.1-schnell"
             )
             
-            # ইমেজ অবজেক্টকে raw bytes-এ কনভার্ট করা হচ্ছে ফেসবুক পোস্টের জন্য
             import io
             img_byte_arr = io.BytesIO()
             image.save(img_byte_arr, format='JPEG')
@@ -140,8 +149,9 @@ def main():
         print("❌ প্রোজেক্টের প্রয়েজনীয় টোকেনগুলো (FB বা HF) সেট করা নেই। GitHub Secrets চেক করুন।")
         sys.exit(1)
 
-    topic = random.choice(HISTORICAL_TOPICS)
-    print(f"🏷️  নির্বাচিত টপিক: {topic}")
+    # পুরাতন ফিক্সড লিস্টের বদলে এখন সম্পূর্ণ এআই জেনারেটেড ইউনিক টপিক আসবে
+    topic = auto_generate_topic()
+    print(f"🏷️  AI জেনারেটেড নতুন টপিক: {topic}")
 
     prompt = generate_prompt(topic, style)
     print(f"🚀 প্রম্পট রেডি: {prompt}")
