@@ -3,7 +3,7 @@ AI ছবি জেনারেট করে স্বয়ংক্রিয�
 GitHub Actions থেকে নির্ধারিত সময়ে (cron) এই স্ক্রিপ্ট চলবে।
 
 প্রতিবার রান হলে এই স্ক্রিপ্ট:
-  1. TOPIC থেকে AI দিয়ে একটা নতুন ছবির prompt বানায়
+  1. নির্ধারিত টপিক লিস্ট থেকে র্যান্ডমলি একটা নতুন ছবির prompt বানায়
   2. সেই prompt দিয়ে ছবি জেনারেট করে (Pollinations AI)
   3. AI দিয়ে একটা বাংলা caption লিখে দেয়
   4. ছবি + caption Facebook Page-এ পোস্ট করে দেয়
@@ -11,7 +11,6 @@ GitHub Actions থেকে নির্ধারিত সময়ে (cron) �
 প্রয়োজনীয় Environment Variables (GitHub Secrets থেকে আসে):
   FB_PAGE_TOKEN  - Facebook Page Access Token (long-lived হওয়া আবশ্যক)
   FB_PAGE_ID     - Facebook Page ID
-  TOPIC          - ছবির টপিক, যেমন "প্রকৃতি" বা "motivational quotes"
   STYLE          - (ঐচ্ছিক) যেমন "photorealistic, DSLR photography, 8k resolution"
 """
 
@@ -37,6 +36,20 @@ ANGLE_HINTS = [
     "with a cinematic, atmospheric mood",
     "from a wide establishing shot perspective",
     "with a minimalist, clean aesthetic",
+]
+
+# 📝 আপনার পছন্দের ঐতিহাসিক টপিকগুলোর লিস্ট (এখানে ইচ্ছেমতো আরও বাড়াতে পারবেন)
+HISTORICAL_TOPICS = [
+    "Historical Place in the World",
+    "Ancient Wonders of the World",
+    "Mysterious Lost Cities in History",
+    "Medieval Castles and Fortresses",
+    "Ancient Roman and Greek Architecture",
+    "UNESCO World Heritage Sites",
+    "Ancient Egyptian Temples and Pharaoh Heritage",
+    "Mughal Architecture and Historic Forts",
+    "Legendary Mythological Kingdoms",
+    "Ancient European Gothic Cathedrals"
 ]
 
 
@@ -102,19 +115,17 @@ def post_to_facebook(image_bytes: bytes, caption: str, token: str, page_id: str)
 
 
 def main():
-    topic = os.environ.get("TOPIC", "").strip()
     style = os.environ.get("STYLE", "").strip()
     fb_token = os.environ.get("FB_PAGE_TOKEN", "").strip()
     fb_page_id = os.environ.get("FB_PAGE_ID", "").strip()
 
-    if not topic:
-        print("❌ TOPIC সেট করা নেই। GitHub Secrets-এ TOPIC যুক্ত করুন।")
-        sys.exit(1)
     if not fb_token or not fb_page_id:
         print("❌ FB_PAGE_TOKEN বা FB_PAGE_ID সেট করা নেই। GitHub Secrets চেক করুন।")
         sys.exit(1)
 
-    print(f"🏷️  টপিক: {topic}")
+    # 🎲 লিস্ট থেকে প্রতিবার র্যান্ডমলি ১টি টপিক সিলেক্ট করা হচ্ছে
+    topic = random.choice(HISTORICAL_TOPICS)
+    print(f"🏷️  আজকের নির্বাচিত টপিক: {topic}")
 
     print("🤖 AI দিয়ে নতুন prompt বানানো হচ্ছে...")
     prompt = generate_prompt(topic, style)
