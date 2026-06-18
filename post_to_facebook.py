@@ -7,7 +7,7 @@ import os
 import random
 import sys
 import time
-import io  # ইম্পোর্ট উপরে নিয়ে আসা হলো
+import io
 import requests
 from huggingface_hub import InferenceClient
 
@@ -27,7 +27,7 @@ ANGLE_HINTS = [
 ]
 
 def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 150) -> str:
-    """Hugging Face-এর শক্তিশালী লার্জ ল্যাঙ্গুয়েজ মডেল ব্যবহার করে টেক্সট জেনারেট করার সেফ ফাংশন।"""
+    """Hugging Face-এর শক্তিশালী লার্জ ল্যাঙ্গুয়েজ модель ব্যবহার করে টেক্সট জেনারেট করার সেফ ফাংশন।"""
     text_model = "Qwen/Qwen2.5-72B-Instruct"
     
     for attempt in range(3):
@@ -48,13 +48,16 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 150
     raise RuntimeError("Hugging Face টেক্সট সার্ভার থেকে রেসপন্স পাওয়া যায়নি।")
 
 def auto_generate_topic(client: InferenceClient) -> str:
-    """Hugging Face AI ব্যবহার করে নিজে থেকে একটি নতুন এবং অনন্য ঐতিহাসিক টপিক তৈরি করে।"""
-    print("🔍 Hugging Face AI-এর কাছ থেকে নতুন ইউনিক টপিক আইডিয়া নেওয়া হচ্ছে...")
+    """Hugging Face AI ব্যবহার করে নিজে থেকে একটি নতুন এবং অনন্য টপিক তৈরি করে।"""
+    print("🔍 Hugging Face AI-এর কাছ থেকে নতুন ইউনিক টপিকアイデア নেওয়া হচ্ছে...")
     
+    # পেজের বৈচিত্র্য বাড়ানোর জন্য ক্যাটাগরিগুলো আপডেট করা হলো
     categories = [
         "Ancient Lost Civilization", "Mysterious Historical Event", 
         "Architectural Wonder of the Past", "Mythological Kingdom", 
-        "Medieval Secret Castle", "Historical Underwater Ruins"
+        "Medieval Secret Castle", "Historical Underwater Ruins",
+        "Futuristic Cyberpunk Cityscape", "Deep Space Exploration Wonder",
+        "Surreal Steampunk Laboratory", "Nature-infused Fantasy Village"
     ]
     chosen_cat = random.choice(categories)
     
@@ -85,29 +88,33 @@ def generate_prompt(client: InferenceClient, topic: str, style: str) -> str:
     return prompt
 
 def generate_caption(client: InferenceClient, prompt_text: str) -> str:
-    """ছবির prompt থেকে একটা বাংলা Facebook caption বানায়।"""
-    print("📝 বাংলা ক্যাপশন তৈরি করা হচ্ছে...")
+    """ছবির prompt থেকে একটা বাংলা Facebook caption এবং প্রাসঙ্গিক হ্যাশট্যাগ বানায়।"""
+    print("📝 বাংলা ক্যাপশন ও হ্যাশট্যাগ তৈরি করা হচ্ছে...")
     instruction = (
         "Write exactly one short, catchy Facebook caption in Bengali (with 1-2 "
-        f'relevant historical/art emojis like 📜, 🏛️, 🎨) for an AI-generated image described as: "{prompt_text}". '
-        "Output only the caption text, nothing else. Do not use sparkle symbols like ✨."
+        f'relevant emojis like 📜, 🏛️, 🎨, 🌌) for an AI-generated image described as: "{prompt_text}". '
+        "Also include 3-4 relevant English hashtags at the very end (e.g., #AIArt #MidjourneyStyle). "
+        "Output only the caption text and hashtags, nothing else. Do not use sparkle symbols like ✨."
     )
     try:
-        caption = get_hf_text(client, instruction, max_tokens=100)
+        caption = get_hf_text(client, instruction, max_tokens=150)
         caption = caption.replace("✨", "📜").replace("❇️", "🏛️").strip('"').strip("'")
-        return caption or "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
+        return caption or "ইতিহাস আর কল্পনার পাতা থেকে এক রহস্যময় ঝলক... 📜🎨\n\n#AIArt #DigitalArt"
     except Exception:
-        return "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
+        return "ইতিহাস আর কল্পনার পাতা থেকে এক রহস্যময় ঝলক... 📜🎨\n\n#AIArt #DigitalArt"
 
 def generate_image_hf_official(client: InferenceClient, prompt_text: str) -> bytes:
-    """Hugging Face Hub লাইব্রেরি ব্যবহার করে FLUX ছবি জেনারেট করে।"""
+    """Hugging Face Hub লাইব্রেরি ব্যবহার করে ফেসবুক স্ট্যান্ডার্ড ল্যান্ডস্কেপ (1024x768) সাইজের FLUX ছবি জেনারেট করে।"""
     print("🎨 Hugging Face FLUX মডেল দিয়ে ছবি জেনারেট করা হচ্ছে...")
     
     for attempt in range(3):
         try:
+            # width এবং height সেট করে অ্যাসপেক্ট রেশিও ৪:৩ (ফেসবুকের জন্য মানানসই) করা হলো
             image = client.text_to_image(
                 prompt_text, 
-                model="black-forest-labs/FLUX.1-schnell"
+                model="black-forest-labs/FLUX.1-schnell",
+                width=1024,
+                height=768
             )
             
             img_byte_arr = io.BytesIO()
@@ -162,9 +169,9 @@ def main():
 
     # ৩. ক্যাপশন জেনারেট করা
     caption = generate_caption(client, prompt)
-    print(f"📝 ক্যাপশন রেডি: {caption}")
+    print(f"📝 ক্যাপশন রেডি:\n{caption}")
 
-    # ৪. ইমেজ জেনারেশন
+    # ۴. ইমেজ জেনারেশন
     image_bytes = generate_image_hf_official(client, prompt)
     print(f"✅ ছবি সফলভাবে জেনারেট হয়েছে ({len(image_bytes)} bytes)")
 
