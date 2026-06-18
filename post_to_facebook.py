@@ -1,6 +1,6 @@
 """
-Hugging Face API এবং Pollinations AI ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
-এখন এটি নিজে থেকে প্রতিদিন নতুন নতুন ইউনিক টপিক খুঁজে বের করবে!
+Hugging FaceHub API এবং Pollinations AI ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
+টপিক জেনারেশন ও ক্যাপশন সিস্টেম সম্পূর্ণ আপডেটেড।
 """
 
 import os
@@ -43,9 +43,8 @@ def safe_text_request(url: str, max_retries: int = 3, delay: int = 5) -> request
 
 def auto_generate_topic() -> str:
     """AI ব্যবহার করে সম্পূর্ণ নিজে থেকে একটি নতুন এবং অনন্য ঐতিহাসিক টপিক তৈরি করে।"""
-    print("🔍 AI-এর কাছ থেকে নতুন ইউনিক টপিক আইডিয়া নেওয়া হচ্ছে...")
+    print("🔍 AI-এর কাছ থেকে নতুন ইউনিক টপিক আইডিয়া নেওয়া হচ্ছে...")
     
-    # এআই-কে ভিন্ন ভিন্ন আইডিয়া দেওয়ার জন্য কিছু ক্যাটাগরি র‍্যান্ডমলি সিলেক্ট করা
     categories = [
         "Ancient Lost Civilization", "Mysterious Historical Event", 
         "Architectural Wonder of the Past", "Mythological Kingdom", 
@@ -86,22 +85,26 @@ def generate_prompt(topic: str, style: str) -> str:
     return prompt
 
 def generate_caption(prompt_text: str) -> str:
-    """ছবির prompt থেকে একটা বাংলা Facebook caption বানায়।"""
+    """ছবির prompt থেকে একটা বাংলা Facebook caption বানায়। (Gemini ইমোজি মুক্ত সংস্করণ)"""
     instruction = (
         "Write exactly one short, catchy Facebook caption in Bengali (with 1-2 "
-        f'relevant emojis) for an AI-generated image described as: "{prompt_text}". '
-        "Output only the caption text, nothing else."
+        f'relevant historical/art emojis like 📜, 🏛️, 🎨) for an AI-generated image described as: "{prompt_text}". '
+        "Output only the caption text, nothing else. Do not use sparkle symbols."
     )
     try:
         url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
         resp = safe_text_request(url, max_retries=2, delay=3)
-        return resp.text.strip() or "✨ AI ছবি"
+        caption = resp.text.strip()
+        # যদি এআই ভুল করে জেমিনি বা স্পার্কল ইমোজি দিয়েও ফেলে, তা এখানে ফিল্টার হয়ে যাবে
+        caption = caption.replace("✨", "📜").replace("❇️", "🏛️")
+        return caption or "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
     except Exception:
-        return "✨ AI ছবি"
+        # ব্যাকআপ ডিফল্ট ক্যাপশন (এখান থেকেও ✨ সরিয়ে দেওয়া হয়েছে)
+        return "ইতিহাসের পাতা থেকে এক রহস্যময় ঝলক... 📜🏛️"
 
 def generate_image_hf_official(prompt_text: str, hf_token: str) -> bytes:
     """Hugging Face Hub লাইব্রেরি ব্যবহার করে ছবি জেনারেট করে।"""
-    print("🎨 Hugging Face অফিসিয়াল ক্লায়েন্ট দিয়ে ছবি জেনারেট করা হচ্ছে...")
+    print("🎨 Hugging Face অফিসিয়াল ক্লায়েন্ট দিয়ে ছবি জেনারেট করা হচ্ছে...")
     client = InferenceClient(token=hf_token)
     
     for attempt in range(3):
@@ -119,13 +122,13 @@ def generate_image_hf_official(prompt_text: str, hf_token: str) -> bytes:
         except Exception as e:
             print(f"⚠️ ছবি জেনারেশন ব্যর্থ (চেষ্টা {attempt + 1}): {e}")
             if "503" in str(e) or "Loading" in str(e):
-                print("⏳ মডেল লোড হতে সময় নিচ্ছে... ২০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
+                print("⏳ মডেল লোড হতে সময় নিচ্ছে... ২০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
                 time.sleep(20)
             elif attempt < 2:
                 time.sleep(10)
             else:
                 raise e
-    raise RuntimeError("Hugging Face ক্লায়েন্ট থেকে ছবি জেনারেট করা সম্ভব হয়নি।")
+    raise RuntimeError("Hugging Face ক্লায়েন্ট থেকে ছবি জেনারেট করা সম্ভব হয়নি।")
 
 def post_to_facebook(image_bytes: bytes, caption: str, token: str, page_id: str):
     """ছবি Facebook Page-এ পোস্ট করে।"""
@@ -149,7 +152,6 @@ def main():
         print("❌ প্রোজেক্টের প্রয়েজনীয় টোকেনগুলো (FB বা HF) সেট করা নেই। GitHub Secrets চেক করুন।")
         sys.exit(1)
 
-    # পুরাতন ফিক্সড লিস্টের বদলে এখন সম্পূর্ণ এআই জেনারেটেড ইউনিক টপিক আসবে
     topic = auto_generate_topic()
     print(f"🏷️  AI জেনারেটেড নতুন টপিক: {topic}")
 
