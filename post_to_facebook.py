@@ -1,5 +1,5 @@
 """
-Hugging Face API ব্যবহার করে AI ছবি জেনারেট ও Facebook Page-এ অটো-পোস্ট করার স্ক্রিপ্ট।
+Hugging Face Hub API ব্যবহার করে AI ছবি জেনারেট ও Facebook Page-এ অটো-পোস্ট করার স্ক্রিপ্ট।
 """
 
 import os
@@ -8,10 +8,9 @@ import sys
 import time
 import urllib.parse
 import requests
+from huggingface_hub import InferenceClient
 
 POLLINATIONS_TEXT_URL = "https://text.pollinations.ai/"
-# Hugging Face-এর নতুন ও সঠিক এপিআই এন্ডপয়েন্ট (api-inference সাবডোমেন পরিবর্তন করা হয়েছে)
-HF_IMAGE_API_URL = "https://api.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
 FB_GRAPH_API = "https://graph.facebook.com/v21.0"
 
 ANGLE_HINTS = [
@@ -41,32 +40,15 @@ HISTORICAL_TOPICS = [
     "If Ancient Civilizations Never Died",
 ]
 
-def safe_request(url: str, method: str = "GET", max_retries: int = 3, delay: int = 5, **kwargs) -> requests.Response:
-    """নেটওয়ার্ক এরর বা ডাউনটাইম থাকলে হ্যান্ডেল করে এবং ৩ বার পুনরায় চেষ্টা (Retry) করে।"""
-    if "timeout" not in kwargs:
-        kwargs["timeout"] = 90
-
+def safe_text_request(url: str, max_retries: int = 3, delay: int = 5) -> requests.Response:
+    """টেক্সট/ক্যাপশন জেনারেটরের জন্য রিট্রাই মেকানিজম।"""
     for attempt in range(max_retries):
         try:
-            if method.upper() == "POST":
-                resp = requests.post(url, **kwargs)
-            else:
-                resp = requests.get(url, **kwargs)
-            
-            # Hugging Face মডেল লোড হতে সময় নিলে (503) এখানেই ওয়েট করবে
-            if resp.status_code == 503 and "huggingface.co" in url:
-                try:
-                    estimated_time = resp.json().get('estimated_time', 20)
-                except Exception:
-                    estimated_time = 20
-                print(f"⏳ Hugging Face মডেল লোড হচ্ছে... {estimated_time} সেকেন্ড অপেক্ষা করা হচ্ছে...")
-                time.sleep(estimated_time)
-                continue
-
+            resp = requests.get(url, timeout=90)
             resp.raise_for_status()
             return resp
-        except (requests.exceptions.RequestException, Exception) as e:
-            print(f"⚠️ চেষ্টা {attempt + 1} ব্যর্থ হয়েছে! কারণ: {e}. {delay} সেকেন্ড পর আবার চেষ্টা করা হচ্ছে...")
+        except Exception as e:
+            print(f"⚠️ টেক্সট সার্ভার এরর (চেষ্টা {attempt + 1}): {e}. আবার চেষ্টা করা হচ্ছে...")
             if attempt < max_retries - 1:
                 time.sleep(delay)
             else:
@@ -82,7 +64,7 @@ def generate_prompt(topic: str, style: str) -> str:
         "nothing else, no quotes, no numbering."
     )
     url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
-    resp = safe_request(url, method="GET")
+    resp = safe_text_request(url)
     prompt = resp.text.strip()
     if not prompt:
         raise RuntimeError("AI prompt তৈরি করতে ব্যর্থ হয়েছে")
@@ -99,19 +81,42 @@ def generate_caption(prompt_text: str) -> str:
     )
     try:
         url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
-        resp = safe_request(url, method="GET", max_retries=2, delay=3)
+        resp = safe_text_request(url, max_retries=2, delay=3)
         return resp.text.strip() or "✨ AI ছবি"
     except Exception:
         return "✨ AI ছবি"
 
-def generate_image_hf(prompt_text: str, hf_token: str) -> bytes:
-    """Hugging Face API ব্যবহার করে হাই-কোয়ালিটি ছবি জেনারেট করে।"""
-    headers = {"Authorization": f"Bearer {hf_token}"}
-    payload = {"inputs": prompt_text}
+def generate_image_hf_official(prompt_text: str, hf_token: str) -> bytes:
+    """Hugging Face Hub লাইব্রেরি ব্যবহার করে সুরক্ষিত উপায়ে ছবি জেনারেট করে।"""
+    print("🎨 Hugging Face অফিসিয়াল ক্লায়েন্ট দিয়ে ছবি জেনারেট করা হচ্ছে...")
     
-    print("🎨 Hugging Face সার্ভারে ছবি জেনারেট করার রিকোয়েস্ট পাঠানো হচ্ছে...")
-    resp = safe_request(HF_IMAGE_API_URL, method="POST", headers=headers, json=payload, timeout=120)
-    return resp.content
+    # ক্লায়েন্ট ইনিশিয়েলাইজেশন
+    client = InferenceClient(token=hf_token)
+    
+    for attempt in range(3):
+        try:
+            # FLUX.1-schnell মডেল ব্যবহার করে ইমেজ জেনারেশন
+            image = client.text_to_image(
+                prompt_text, 
+                model="black-forest-labs/FLUX.1-schnell"
+            )
+            
+            # ইমেজ অবজেক্টকে raw bytes-এ কনভার্ট করা হচ্ছে ফেসবুক পোস্টের জন্য
+            import io
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='JPEG')
+            return img_byte_arr.getvalue()
+            
+        except Exception as e:
+            print(f"⚠️ ছবি জেনারেশন ব্যর্থ (চেষ্টা {attempt + 1}): {e}")
+            if "503" in str(e) or "Loading" in str(e):
+                print("⏳ মডেল লোড হতে সময় নিচ্ছে... ২০ সেকেন্ড অপেক্ষা করা হচ্ছে...")
+                time.sleep(20)
+            elif attempt < 2:
+                time.sleep(10)
+            else:
+                raise e
+    raise RuntimeError("Hugging Face ক্লায়েন্ট থেকে ছবি জেনারেট করা সম্ভব হয়নি।")
 
 def post_to_facebook(image_bytes: bytes, caption: str, token: str, page_id: str):
     """ছবি Facebook Page-এ পোস্ট করে।"""
@@ -119,7 +124,7 @@ def post_to_facebook(image_bytes: bytes, caption: str, token: str, page_id: str)
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
     data = {"message": caption, "access_token": token}
     
-    resp = safe_request(url, method="POST", data=data, files=files, timeout=60)
+    resp = requests.post(url, data=data, files=files, timeout=90)
     result = resp.json()
     if "id" in result:
         return True, result["id"]
@@ -144,7 +149,7 @@ def main():
     caption = generate_caption(prompt)
     print(f"📝 ক্যাপশন রেডি: {caption}")
 
-    image_bytes = generate_image_hf(prompt, hf_token)
+    image_bytes = generate_image_hf_official(prompt, hf_token)
     print(f"✅ ছবি সফলভাবে জেনারেট হয়েছে ({len(image_bytes)} bytes)")
 
     print("📘 Facebook-এ পোস্ট করা হচ্ছে...")
