@@ -22,7 +22,6 @@ TARGET_IMAGE_SIZE = (1024, 768)
 TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"]
 IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
 
-# ভিউ বাড়ানোর জন্য ২০টি ক্যাটাগরি
 TOPIC_CATEGORIES = [
     "Ancient Lost Civilization", "Mysterious Historical Event",
     "Architectural Wonder of the Past", "Mythological Kingdom",
@@ -61,7 +60,7 @@ def _is_rate_limited(error: Exception) -> bool:
     msg = str(error).lower()
     return "429" in msg or "rate limit" in msg or "too many requests" in msg
 
-def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 200) -> str:
+def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 250) -> str:
     last_error = None
     for model in TEXT_MODELS:
         for attempt in range(3):
@@ -79,8 +78,7 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 200
                 last_error = e
                 if _is_rate_limited(e):
                     break
-                wait = 8 * (attempt + 1)
-                time.sleep(wait)
+                time.sleep(8 * (attempt + 1))
     raise RuntimeError(f"টেক্সট জেনারেশন ব্যর্থ। সর্বশেষ এরর: {last_error}")
 
 def auto_generate_topic(client: InferenceClient) -> str:
@@ -102,12 +100,16 @@ def generate_prompt(client: InferenceClient, topic: str, style: str) -> str:
 
 def generate_caption(client: InferenceClient, prompt_text: str) -> str:
     instruction = (
-        "Write a short, catchy Facebook caption in Bengali (with 1-2 relevant emojis like 📜, 🏛️, 🎨) "
-        f'for an image described as: "{prompt_text}". Also include 3-4 relevant English hashtags '
-        "related to the subject. Do not use AI-related hashtags. Output ONLY the caption and tags."
+        "Write a highly engaging, storytelling-style Facebook caption in Bengali. "
+        "The caption should start with an emotional hook or a mysterious question about the image, "
+        "followed by a short, descriptive narrative. "
+        "Maintain a professional yet warm tone. "
+        "Add 2-3 relevant emojis (like 📜, 🏛️, 🎨, ✨) appropriately. "
+        "Include 3-4 trending and highly relevant English hashtags at the end. "
+        "Do not use AI-related hashtags. Output ONLY the caption and tags."
     )
     try:
-        caption = get_hf_text(client, instruction, max_tokens=150)
+        caption = get_hf_text(client, instruction, max_tokens=250)
         return caption.strip('"').strip("'")
     except:
         return DEFAULT_CAPTION
