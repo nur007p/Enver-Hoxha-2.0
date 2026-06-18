@@ -10,8 +10,8 @@ import urllib.parse
 import requests
 
 POLLINATIONS_TEXT_URL = "https://text.pollinations.ai/"
-# Hugging Face-এর সেরা ফ্রি ইমেজ জেনারেশনモデル (FLUX.1-schnell)
-HF_IMAGE_API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+# Hugging Face-এর নতুন ও সঠিক এপিআই এন্ডপয়েন্ট (api-inference সাবডোমেন পরিবর্তন করা হয়েছে)
+HF_IMAGE_API_URL = "https://api.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
 FB_GRAPH_API = "https://graph.facebook.com/v21.0"
 
 ANGLE_HINTS = [
@@ -42,7 +42,7 @@ HISTORICAL_TOPICS = [
 ]
 
 def safe_request(url: str, method: str = "GET", max_retries: int = 3, delay: int = 5, **kwargs) -> requests.Response:
-    """নেটওয়ার্ক এরর বা ডাউনটাইম থাকলে হ্যান্ডেল করে এবং ৩ বার পুনরায় চেষ্টা (Retry) করে।"""
+    """নেটওয়ার্ক এরর বা ডাউনটাইম থাকলে হ্যান্ডেল করে এবং ৩ বার পুনরায় চেষ্টা (Retry) করে।"""
     if "timeout" not in kwargs:
         kwargs["timeout"] = 90
 
@@ -53,8 +53,8 @@ def safe_request(url: str, method: str = "GET", max_retries: int = 3, delay: int
             else:
                 resp = requests.get(url, **kwargs)
             
-            # Hugging Face মডল লোড হতে সময় নিলে (503) এখানেই ওয়েট করবে
-            if resp.status_code == 503 and "api-inference.huggingface.co" in url:
+            # Hugging Face মডেল লোড হতে সময় নিলে (503) এখানেই ওয়েট করবে
+            if resp.status_code == 503 and "huggingface.co" in url:
                 try:
                     estimated_time = resp.json().get('estimated_time', 20)
                 except Exception:
@@ -66,7 +66,7 @@ def safe_request(url: str, method: str = "GET", max_retries: int = 3, delay: int
             resp.raise_for_status()
             return resp
         except (requests.exceptions.RequestException, Exception) as e:
-            print(f"⚠️ চেষ্টা {attempt + 1} ব্যর্থ হয়েছে! কারণ: {e}. {delay} সেকেন্ড পর আবার চেষ্টা করা হচ্ছে...")
+            print(f"⚠️ চেষ্টা {attempt + 1} ব্যর্থ হয়েছে! কারণ: {e}. {delay} সেকেন্ড পর আবার চেষ্টা করা হচ্ছে...")
             if attempt < max_retries - 1:
                 time.sleep(delay)
             else:
@@ -132,7 +132,7 @@ def main():
     hf_token = os.environ.get("HF_TOKEN", "").strip()
 
     if not fb_token or not fb_page_id or not hf_token:
-        print("❌ প্রোজেক্টের প্রয়েজনীয় টোকেনগুলো (FB বা HF) সেট করা নেই। GitHub Secrets চেক করুন।")
+        print("❌ প্রোজেক্টের প্রয়েজনীয় টোকেনগুলো (FB বা HF) সেট করা নেই। GitHub Secrets চেক করুন।")
         sys.exit(1)
 
     topic = random.choice(HISTORICAL_TOPICS)
@@ -145,7 +145,7 @@ def main():
     print(f"📝 ক্যাপশন রেডি: {caption}")
 
     image_bytes = generate_image_hf(prompt, hf_token)
-    print(f"✅ ছবি সফলভাবে জেনারেট হয়েছে ({len(image_bytes)} bytes)")
+    print(f"✅ ছবি সফলভাবে জেনারেট হয়েছে ({len(image_bytes)} bytes)")
 
     print("📘 Facebook-এ পোস্ট করা হচ্ছে...")
     success, result = post_to_facebook(image_bytes, caption, fb_token, fb_page_id)
