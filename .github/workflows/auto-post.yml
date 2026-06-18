@@ -3,11 +3,18 @@ name: Auto Facebook Post
 on:
   schedule:
     - cron: '*/30 * * * *' # প্রতি ৩০ মিনিটে অটো চলবে
-  workflow_dispatch: {}   # ম্যানুয়ালি টেস্ট রান করার বাটন দেবে
+  workflow_dispatch: {}    # ম্যানুয়ালি টেস্ট রান করার বাটন
 
 jobs:
   post:
     runs-on: ubuntu-latest
+    # নতুন যোগ করা কনকারেন্সি লজিক (৩০ মিনিট পরপর রান করার জন্য এটা খুব জরুরি)
+    concurrency:
+      group: facebook-autopost
+      cancel-in-progress: true
+      
+    timeout-minutes: 15 # রান যেন আটকে না থাকে
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -15,16 +22,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12' # আপনার পাইথন ভার্সন ৩.১২-এ আপডেট করা ভালো
+          cache: 'pip'           # ক্যাশ ব্যবহার করলে রান দ্রুত হবে
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Generate image, caption & post to Facebook
         env:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }} # Hugging Face-এর জন্য এই নতুন secret-টি যোগ করা হলো
-          TOPIC: ${{ secrets.TOPIC }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # যদি এনভায়রনমেন্ট ভেরিয়েবল ব্যবহার করেন
           STYLE: ${{ secrets.STYLE }}
-        run: python post_to_facebook.py
+        run: python auto_fb_post.py # আপনার পাইথন ফাইলের নাম এখানে সঠিক রাখুন
