@@ -2,7 +2,7 @@ name: Auto Facebook Post
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # প্রতি ১ ঘণ্টায় অটো চলবে
+    - cron: '*/30 * * * *' # প্রতি ৩০ মিনিটে অটো চলবে
   workflow_dispatch: {}   # ম্যানুয়ালি টেস্ট রান করার বাটন দেবে
 
 jobs:
@@ -24,6 +24,7 @@ jobs:
         env:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }} # Hugging Face-এর জন্য এই নতুন secret-টি যোগ করা হলো
           TOPIC: ${{ secrets.TOPIC }}
           STYLE: ${{ secrets.STYLE }}
         run: python post_to_facebook.py
