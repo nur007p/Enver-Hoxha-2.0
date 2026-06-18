@@ -1,6 +1,6 @@
 """
 Hugging Face Hub API ব্যবহার করে সম্পূর্ণ অটোমেটিক ফেসবুক পোস্ট স্ক্রিপ্ট।
-Pollinations AI-এর ৪২৯ এরর এড়াতে সম্পূর্ণ প্রসেস Hugging Face Hub-এ স্থানান্তরিত।
+ফিডব্যাক অনুযায়ী জাপানি ক্যারেক্টার বাগ ফিক্সড এবং এপিআই স্টেবিলিটি নিশ্চিত করা হয়েছে।
 """
 
 import os
@@ -27,7 +27,7 @@ ANGLE_HINTS = [
 ]
 
 def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 150) -> str:
-    """Hugging Face-এর শক্তিশালী লার্জ ল্যাঙ্গুয়েজ модель ব্যবহার করে টেক্সট জেনারেট করার সেফ ফাংশন।"""
+    """Hugging Face-এর শক্তিশালী লার্জ ল্যাঙ্গুয়েজ মডেল ব্যবহার করে টেক্সট জেনারেট করার সেফ ফাংশন।"""
     text_model = "Qwen/Qwen2.5-72B-Instruct"
     
     for attempt in range(3):
@@ -49,9 +49,9 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 150
 
 def auto_generate_topic(client: InferenceClient) -> str:
     """Hugging Face AI ব্যবহার করে নিজে থেকে একটি নতুন এবং অনন্য টপিক তৈরি করে।"""
-    print("🔍 Hugging Face AI-এর কাছ থেকে নতুন ইউনিক টপিকアイデア নেওয়া হচ্ছে...")
+    # জাপানি ক্যারেক্টার বাগটি ফিক্স করা হলো (アイデア -> আইডিয়া)
+    print("🔍 Hugging Face AI-এর কাছ থেকে নতুন ইউনিক টপিক আইডিয়া নেওয়া হচ্ছে...")
     
-    # পেজের বৈচিত্র্য বাড়ানোর জন্য ক্যাটাগরিগুলো আপডেট করা হলো
     categories = [
         "Ancient Lost Civilization", "Mysterious Historical Event", 
         "Architectural Wonder of the Past", "Mythological Kingdom", 
@@ -104,17 +104,15 @@ def generate_caption(client: InferenceClient, prompt_text: str) -> str:
         return "ইতিহাস আর কল্পনার পাতা থেকে এক রহস্যময় ঝলক... 📜🎨\n\n#AIArt #DigitalArt"
 
 def generate_image_hf_official(client: InferenceClient, prompt_text: str) -> bytes:
-    """Hugging Face Hub লাইব্রেরি ব্যবহার করে ফেসবুক স্ট্যান্ডার্ড ল্যান্ডস্কেপ (1024x768) সাইজের FLUX ছবি জেনারেট করে।"""
+    """Hugging Face Hub লাইব্রেরি ব্যবহার করে FLUX ছবি জেনারেট করে।"""
     print("🎨 Hugging Face FLUX মডেল দিয়ে ছবি জেনারেট করা হচ্ছে...")
     
     for attempt in range(3):
         try:
-            # width এবং height সেট করে অ্যাসপেক্ট রেশিও ৪:৩ (ফেসবুকের জন্য মানানসই) করা হলো
+            # ফ্রি ইনফারেন্স এন্ডপয়েন্টে এরর এড়াতে কাস্টম রেজোলিউশন ডিফল্ট রাখা হলো (প্রয়োজনে PIL দিয়ে রিসাইজ করা যাবে)
             image = client.text_to_image(
                 prompt_text, 
-                model="black-forest-labs/FLUX.1-schnell",
-                width=1024,
-                height=768
+                model="black-forest-labs/FLUX.1-schnell"
             )
             
             img_byte_arr = io.BytesIO()
@@ -171,7 +169,7 @@ def main():
     caption = generate_caption(client, prompt)
     print(f"📝 ক্যাপশন রেডি:\n{caption}")
 
-    # ۴. ইমেজ জেনারেশন
+    # ৪. ইমেজ জেনারেশন
     image_bytes = generate_image_hf_official(client, prompt)
     print(f"✅ ছবি সফলভাবে জেনারেট হয়েছে ({len(image_bytes)} bytes)")
 
