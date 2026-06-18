@@ -2,18 +2,17 @@ name: Auto Facebook Post
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # প্রতি ৩০ মিনিটে অটো চলবে
-  workflow_dispatch: {}    # ম্যানুয়ালি টেস্ট রান করার বাটন
+    - cron: '*/30 * * * *' # প্রতি ৩০ মিনিট অন্তর রান হবে
+  workflow_dispatch: {}    # ম্যানুয়ালি টেস্ট রান করার জন্য
 
 jobs:
   post:
     runs-on: ubuntu-latest
-    # নতুন যোগ করা কনকারেন্সি লজিক (৩০ মিনিট পরপর রান করার জন্য এটা খুব জরুরি)
     concurrency:
       group: facebook-autopost
-      cancel-in-progress: true
-      
-    timeout-minutes: 15 # রান যেন আটকে না থাকে
+      cancel-in-progress: true # আগের রান অসম্পূর্ণ থাকলে নতুনটি শুরু হওয়ার সময় আগেরটি বাতিল হবে
+    
+    timeout-minutes: 15 # রান ১৫ মিনিটের বেশি সময় নিলে অটোমেটিক বন্ধ হয়ে যাবে
     
     steps:
       - name: Checkout repository
@@ -22,8 +21,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12' # আপনার পাইথন ভার্সন ৩.১২-এ আপডেট করা ভালো
-          cache: 'pip'           # ক্যাশ ব্যবহার করলে রান দ্রুত হবে
+          python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -35,6 +34,5 @@ jobs:
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          # যদি এনভায়রনমেন্ট ভেরিয়েবল ব্যবহার করেন
-          STYLE: ${{ secrets.STYLE }}
-        run: python auto_fb_post.py # আপনার পাইথন ফাইলের নাম এখানে সঠিক রাখুন
+          # যদি স্টাইল বা প্রোভাইডার সেট করতে চান, তবে এখানে সিক্রেট যোগ করবেন
+        run: python post_to_facebook.py
