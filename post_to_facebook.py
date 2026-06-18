@@ -49,7 +49,8 @@ HISTORICAL_TOPICS = [
     "Ancient Egyptian Temples and Pharaoh Heritage",
     "Mughal Architecture and Historic Forts",
     "Legendary Mythological Kingdoms",
-    "Ancient European Gothic Cathedrals"
+    "Ancient European Gothic Cathedrals",
+    "If Ancient Civilizations Never Died"
 ]
 
 
