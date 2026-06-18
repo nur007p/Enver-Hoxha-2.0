@@ -17,6 +17,7 @@ GitHub Actions থেকে নির্ধারিত সময়ে (cron) �
 import os
 import random
 import sys
+import time
 import urllib.parse
 
 import requests
@@ -38,7 +39,7 @@ ANGLE_HINTS = [
     "with a minimalist, clean aesthetic",
 ]
 
-# 📝 আপনার পছন্দের ঐতিহাসিক টপিকগুলোর লিস্ট (এখানে ইচ্ছেমতো আরও বাড়াতে পারবেন)
+# 📝 আপনার পছন্দের ঐতিহাসিক টপিকগুলোর লিস্ট
 HISTORICAL_TOPICS = [
     "Historical Place in the World",
     "Ancient Wonders of the World",
@@ -50,8 +51,32 @@ HISTORICAL_TOPICS = [
     "Mughal Architecture and Historic Forts",
     "Legendary Mythological Kingdoms",
     "Ancient European Gothic Cathedrals",
-    "If Ancient Civilizations Never Died"
+    "If Ancient Civilizations Never Died",
 ]
+
+
+def safe_request(url: str, method: str = "GET", max_retries: int = 3, delay: int = 5, **kwargs) -> requests.Response:
+    """সার্ভার ডাউন বা জ্যাম থাকলে টাইমআউট হ্যান্ডেল করে এবং ৩ বার পুনরায় চেষ্টা (Retry) করে।"""
+    # ডিফল্ট টাইমআউট ৯০ সেকেন্ড করা হলো জ্যামের কথা মাথায় রেখে
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 90
+
+    for attempt in range(max_retries):
+        try:
+            if method.upper() == "POST":
+                resp = requests.post(url, **kwargs)
+            else:
+                resp = requests.get(url, **kwargs)
+            resp.raise_for_status()
+            return resp
+        except (requests.exceptions.RequestException, Exception) as e:
+            print(
+                f"⚠️ চেষ্টা {attempt + 1} ব্যর্থ হয়েছে! কারণ: {e}. {delay} সেকেন্ড পর আবার চেষ্টা করা হচ্ছে..."
+            )
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                raise e
 
 
 def generate_prompt(topic: str, style: str) -> str:
@@ -65,8 +90,7 @@ def generate_prompt(topic: str, style: str) -> str:
         "nothing else, no quotes, no numbering, no extra commentary."
     )
     url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
-    resp = requests.get(url, timeout=60)
-    resp.raise_for_status()
+    resp = safe_request(url)
     prompt = resp.text.strip()
     if not prompt:
         raise RuntimeError("AI prompt তৈরি করতে ব্যর্থ হয়েছে (খালি উত্তর এসেছে)")
@@ -84,8 +108,7 @@ def generate_caption(prompt_text: str) -> str:
     )
     try:
         url = POLLINATIONS_TEXT_URL + urllib.parse.quote(instruction)
-        resp = requests.get(url, timeout=60)
-        resp.raise_for_status()
+        resp = safe_request(url, max_retries=2, delay=3)
         caption = resp.text.strip()
         return caption or "✨ AI ছবি"
     except Exception:
@@ -97,8 +120,8 @@ def generate_image(prompt_text: str) -> bytes:
     seed = random.randint(0, 999999)
     query = urllib.parse.quote(prompt_text)
     url = f"{POLLINATIONS_IMAGE_URL}{query}?width=1024&height=1024&model=flux&seed={seed}"
-    resp = requests.get(url, timeout=120)
-    resp.raise_for_status()
+    # ইমেজ জেনারেশনের জন্য ১২০ সেকেন্ড পর্যন্ত সর্বোচ্চ অপেক্ষা করার সুযোগ রাখা হলো
+    resp = safe_request(url, timeout=120)
     return resp.content
 
 
@@ -107,7 +130,7 @@ def post_to_facebook(image_bytes: bytes, caption: str, token: str, page_id: str)
     url = f"{FB_GRAPH_API}/{page_id}/photos"
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
     data = {"message": caption or "✨ AI ছবি", "access_token": token}
-    resp = requests.post(url, data=data, files=files, timeout=60)
+    resp = safe_request(url, method="POST", data=data, files=files)
     result = resp.json()
     if "id" in result:
         return True, result["id"]
