@@ -9,7 +9,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Gemini কনফিগারেশন
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    logger.error("GEMINI_API_KEY is missing!")
+    exit(1)
+
+genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_gemini_content(prompt: str) -> str:
@@ -32,44 +37,51 @@ def generate_image_and_data():
     
     response = requests.get(image_url, timeout=60)
     if response.status_code == 200:
-        # ফাইল হিসেবে সেভ করা
         with open("temp_image.jpg", "wb") as f:
             f.write(response.content)
         return "temp_image.jpg", caption
     else:
-        raise Exception("Image download failed")
+        raise Exception(f"Image download failed with status {response.status_code}")
 
 def post_to_facebook(image_path, caption, token, page_id):
     url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
     
-    # ফাইলটি ওপেন করে পাঠানো
+    # ফেসবুকের জন্য ডাটা ও ফাইল
     with open(image_path, 'rb') as f:
         files = {'source': f}
         data = {
             'message': caption,
-            'access_token': token
+            'access_token': token,
+            'published': 'true' # পোস্টটি পাবলিকলি পাবলিশ করার জন্য
         }
         
-        response = requests.post(url, files=files, data=data)
+        response = requests.post(url, files=files, data=data, timeout=120)
         result = response.json()
     
-    # কাজ শেষ হলে টেম্পোরারি ফাইলটি ডিলিট করে দেওয়া
+    # টেম্পোরারি ফাইল ডিলিট
     if os.path.exists(image_path):
         os.remove(image_path)
     
     if "id" in result:
-        logger.info(f"Success! ID: {result['id']}")
+        logger.info(f"Successfully posted! ID: {result['id']}")
         return True
     else:
-        logger.error(f"Facebook API Error: {result}")
+        logger.error(f"Facebook API Error Details: {result}")
         return False
 
 def main():
+    fb_token = os.environ.get("FB_PAGE_TOKEN")
+    fb_page_id = os.environ.get("FB_PAGE_ID")
+    
+    if not fb_token or not fb_page_id:
+        logger.error("Facebook credentials are missing in env!")
+        return
+
     try:
         image_path, caption = generate_image_and_data()
-        post_to_facebook(image_path, caption, os.environ.get("FB_PAGE_TOKEN"), os.environ.get("FB_PAGE_ID"))
+        post_to_facebook(image_path, caption, fb_token, fb_page_id)
     except Exception as e:
-        logger.error(f"Main execution failed: {e}")
+        logger.error(f"Execution failed: {e}")
 
 if __name__ == "__main__":
     main()
