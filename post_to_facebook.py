@@ -17,16 +17,33 @@ TARGET_IMAGE_SIZE = (1024, 768)
 TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct"]
 IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
 
+# ৫০টি টপিকের তালিকা
 TOPIC_CATEGORIES = [
-    "Ancient Lost Civilization", "Mysterious Historical Event",
-    "Architectural Wonder of the Past", "Mythological Kingdom",
-    "Medieval Secret Castle", "Historical Underwater Ruins",
-    "Futuristic Cyberpunk Cityscape", "Deep Space Exploration Wonder",
+    "Ancient Lost Civilization in the Amazon", "Mysterious Historical Event from 19th Century",
+    "Architectural Wonder of a Lost Empire", "Mythological Kingdom Under the Sea",
+    "Medieval Secret Castle in the Alps", "Historical Underwater Ruins of Dwarka",
+    "Unsolved Historical Mystery of the Voynich Manuscript", "Ancient Scientific Innovation of the Mayans",
+    "Forgotten Treasure in a dense Jungle", "Secret Passage in an Egyptian Pyramid",
+    "Lost City of Gold in the Andes", "Ghostly Legend of a Forgotten Palace",
+    "Futuristic Cyberpunk Cityscape at Night", "Deep Space Exploration Wonder",
     "Surreal Steampunk Laboratory", "Nature-infused Fantasy Village",
-    "Unsolved Historical Mystery", "Traditional Bengali Village Life",
-    "Ancient Scientific Innovation", "Nature's Hidden Paradise",
-    "Majestic Wildlife in Wild Habitat", "Floating Islands in the Sky",
-    "Forgotten Treasure in a Jungle", "Bioluminescent Enchanted Forest"
+    "Floating Islands in the Sky", "Bioluminescent Enchanted Forest",
+    "Conceptual Art of Time Travel Mechanism", "Cybernetic Samurai in a Bamboo Forest",
+    "Colony on a Distant Exoplanet", "Hidden Doorway to a Parallel Universe",
+    "Floating City of Alchemists", "Neon-lit Forest with Ethereal Wildlife",
+    "Crystal Palace in an Alien Landscape", "Robot Gardener in a Post-Apocalyptic World",
+    "Traditional Bengali Village Life during Harvest", "Majestic Wildlife in Wild Habitat",
+    "Ethereal Spirit of the Sundarbans Mangrove", "Mystical Village Fair under a Full Moon",
+    "Traditional Boat Race on a Stormy River", "Haunted Lighthouse on a Rocky Cliff",
+    "A Waterfall Flowing into the Void", "Cursed Treasure in a Deep Cave",
+    "Sunset over a Futuristic Himalayan Village", "Mythical Sea Serpent in the Bay of Bengal",
+    "Ancient Library Protected by Magical Creatures", "Golden Rice Fields of Rural Bengal",
+    "Rainy Afternoon in a Traditional Bengali House", "Firefly Gathering in an Ancient Banyan Tree",
+    "A Clockwork City inside a Giant Glass Sphere", "Library of Lost Knowledge in a Desert",
+    "A Tree that grows Stars instead of Leaves", "Ancient Bengali Folklore Creature in a Modern Setting",
+    "A Bridge connecting two Moons", "Stairway to the Clouds in a Mountain Peak",
+    "Abandoned Train Station in a Haunted Forest", "Spirit of the Wind in a Winter Valley",
+    "Deserted Carnival with Eerie Decorations", "A Kingdom made entirely of Stained Glass"
 ]
 
 def build_client(hf_token: str) -> InferenceClient:
@@ -42,7 +59,6 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 800
                 temperature=0.6,
             )
             content = response.choices[0].message.content.strip()
-            # যদি ক্যাপশন অসম্পূর্ণ মনে হয়, তবে একটি ডট যোগ করে পূর্ণতা দেওয়া
             if len(content) > 100 and not content.endswith(('.', '!', '?', '#')):
                 content += "..."
             return content
@@ -51,7 +67,6 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 800
     return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক। 📜🎨"
 
 def generate_image_and_data(client: InferenceClient):
-    # ১. বিষয় নির্বাচন
     topic = random.choice(TOPIC_CATEGORIES)
     
     # ২. প্রম্পট তৈরি
@@ -59,7 +74,7 @@ def generate_image_and_data(client: InferenceClient):
     prompt = get_hf_text(client, prompt_instr, max_tokens=150)
     logger.info(f"Generated Prompt: {prompt}")
 
-    # ৩. ক্যাপশন তৈরি (স্ট্রং ইনস্ট্রাকশন)
+    # ৩. ক্যাপশন তৈরি
     caption_instr = (
         f"Context: '{prompt}'. "
         "Write a storytelling-style Facebook caption in Bengali. "
