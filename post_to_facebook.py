@@ -1,7 +1,6 @@
 import os
 import random
 import sys
-import time
 import io
 import logging
 import requests
@@ -27,36 +26,13 @@ TOPIC_CATEGORIES = [
     "Unsolved Historical Mystery", "Traditional Bengali Village Life",
     "Ancient Scientific Innovation", "Nature's Hidden Paradise",
     "Majestic Wildlife in Wild Habitat", "Floating Islands in the Sky",
-    "Forgotten Treasure in a Jungle", "Bioluminescent Enchanted Forest",
-    "Post-Apocalyptic Dhaka City Overgrown with Nature",
-    "Ancient Bengali Folklore Creature in a Modern Setting",
-    "Conceptual Art of Time Travel Mechanism",
-    "Submerged Majestic Temple in a Clear Blue Lake",
-    "Steampunk Version of Traditional Rickshaw",
-    "Breathtaking Sunset over a Futuristic Himalayan Village",
-    "Mythical Sea Serpent Emerging from the Bay of Bengal",
-    "Ancient Library Protected by Magical Creatures",
-    "Cybernetic Samurai in a Bamboo Forest",
-    "Ethereal Spirit of the Sundarbans Mangrove"
+    "Forgotten Treasure in a Jungle", "Bioluminescent Enchanted Forest"
 ]
 
-ANGLE_HINTS = [
-    "from an unusual or creative camera angle", "with dramatic, moody lighting",
-    "in a candid, everyday moment", "with a unique and vivid color palette",
-    "with an interesting, well-balanced composition", "showing fine detail and texture up close",
-    "during golden hour with warm light", "with a cinematic, atmospheric mood",
-    "from a wide establishing shot perspective", "with a minimalist, clean aesthetic",
-]
+def build_client(hf_token: str) -> InferenceClient:
+    return InferenceClient(token=hf_token)
 
-DEFAULT_CAPTION = "ইতিহাস আর কল্পনার পাতা থেকে এক রহস্যময় ঝলক... 📜🎨\n\n#History #Mystery #Fantasy"
-
-def build_client(hf_token: str, hf_provider: str) -> InferenceClient:
-    try:
-        return InferenceClient(token=hf_token, provider=hf_provider, timeout=180)
-    except Exception:
-        return InferenceClient(token=hf_token)
-
-def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 400) -> str:
+def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 600) -> str:
     for model in TEXT_MODELS:
         try:
             response = client.chat_completion(
@@ -68,38 +44,39 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 400
             return response.choices[0].message.content.strip()
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-            continue
-    return DEFAULT_CAPTION
+    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক। 📜🎨"
 
-def auto_generate_topic(client: InferenceClient) -> str:
-    chosen_cat = random.choice(TOPIC_CATEGORIES)
-    instruction = f"Give me exactly one unique, vivid image scene idea based on '{chosen_cat}'. Output ONLY the scene description."
-    return get_hf_text(client, instruction, max_tokens=50)
+def generate_image_and_data(client: InferenceClient):
+    # ১. বিষয় নির্বাচন
+    topic = random.choice(TOPIC_CATEGORIES)
+    
+    # ২. প্রম্পট তৈরি (ছবির জন্য)
+    prompt_instr = f"Create a hyper-realistic, high-quality, atmospheric, detailed AI image prompt for: '{topic}'. Output ONLY the prompt."
+    prompt = get_hf_text(client, prompt_instr, max_tokens=150)
+    logger.info(f"Generated Prompt: {prompt}")
 
-def generate_prompt(client: InferenceClient, topic: str, style: str) -> str:
-    hint = random.choice(ANGLE_HINTS)
-    instruction = f"Create a high-quality, detailed AI image prompt for: '{topic}', {hint}. {style} Output ONLY the prompt."
-    return get_hf_text(client, instruction, max_tokens=150)
-
-def generate_caption(client: InferenceClient, prompt_text: str) -> str:
-    instruction = (
-        f"Image context: '{prompt_text}'. Write a captivating, storytelling-style Facebook caption in Bengali. "
-        "Start with an intriguing question or mystery related to the image. "
-        "Keep it emotional and engaging. Add 2-3 relevant emojis. "
-        "End with 3-4 trending and highly relevant hashtags. "
-        "Output ONLY the caption text."
+    # ৩. ক্যাপশন তৈরি (ছবির প্রম্পটের ওপর ভিত্তি করে)
+    caption_instr = (
+        f"Context/Image Description: '{prompt}'. "
+        "Write a long, deeply immersive, storytelling-style Facebook caption in Bengali. "
+        "1. Start with an intriguing question or a legendary myth related to this image. "
+        "2. Describe the scene vividly, build a sense of wonder, mystery, and atmosphere. Tell a brief story or historical context. "
+        "3. Keep it emotional, engaging, and poetic. "
+        "4. End with 5-6 trending and highly relevant hashtags (Mix of Bengali and English). "
+        "Output ONLY the complete caption text."
     )
-    return get_hf_text(client, instruction, max_tokens=350)
-
-def generate_image_hf(client: InferenceClient, prompt: str) -> bytes:
+    caption = get_hf_text(client, caption_instr, max_tokens=600)
+    
+    # ৪. ছবি তৈরি
     for model in IMAGE_MODELS:
         try:
             raw = client.text_to_image(prompt, model=model)
             img = raw if isinstance(raw, Image.Image) else Image.open(io.BytesIO(raw))
             buf = io.BytesIO()
             img.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS).save(buf, format="JPEG", quality=85)
-            return buf.getvalue()
-        except Exception:
+            return buf.getvalue(), caption
+        except Exception as e:
+            logger.warning(f"Image generation failed with {model}: {e}")
             continue
     raise RuntimeError("Image generation failed.")
 
@@ -110,13 +87,12 @@ def post_to_facebook(image_bytes, caption, token, page_id):
     
     try:
         resp = requests.post(url, data=data, files=files, timeout=90)
-        resp_data = resp.json()
-        
-        if "id" in resp_data:
-            logger.info(f"Successfully posted to Facebook! Post ID: {resp_data['id']}")
+        result = resp.json()
+        if "id" in result:
+            logger.info(f"Successfully posted! Post ID: {result['id']}")
             return True
         else:
-            logger.error(f"Facebook API Error: {resp_data}")
+            logger.error(f"Facebook API Error: {result}")
             return False
     except Exception as e:
         logger.error(f"Request failed: {e}")
@@ -131,15 +107,9 @@ def main():
         logger.error("Missing environment variables.")
         sys.exit(1)
 
-    client = build_client(hf_token, os.environ.get("HF_PROVIDER", "auto"))
+    client = build_client(hf_token)
+    img_bytes, caption = generate_image_and_data(client)
     
-    logger.info("Starting generation process...")
-    topic = auto_generate_topic(client)
-    prompt = generate_prompt(client, topic, os.environ.get("STYLE", ""))
-    caption = generate_caption(client, prompt)
-    img_bytes = generate_image_hf(client, prompt)
-    
-    logger.info("Attempting to post to Facebook...")
     if not post_to_facebook(img_bytes, caption, fb_token, fb_page_id):
         sys.exit(1)
 
