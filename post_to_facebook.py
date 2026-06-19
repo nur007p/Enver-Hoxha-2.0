@@ -8,9 +8,8 @@ import google.generativeai as genai
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Gemini কনফিগারেশন - মডেলের নাম কিছুটা পরিবর্তন করে দেওয়া হয়েছে
+# Gemini কনফিগারেশন - মডেলের নাম স্থিতিশীল রাখা হয়েছে
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-# 'gemini-1.5-flash' এর জায়গায় 'gemini-pro' ব্যবহার করে দেখুন যদি এটি না চলে
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_gemini_content(prompt: str) -> str:
