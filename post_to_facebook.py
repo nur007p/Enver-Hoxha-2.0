@@ -32,38 +32,41 @@ TOPIC_CATEGORIES = [
 def build_client(hf_token: str) -> InferenceClient:
     return InferenceClient(token=hf_token)
 
-def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 600) -> str:
+def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 800) -> str:
     for model in TEXT_MODELS:
         try:
             response = client.chat_completion(
                 model=model,
                 messages=[{"role": "user", "content": instruction}],
                 max_tokens=max_tokens,
-                temperature=0.7,
+                temperature=0.6,
             )
-            return response.choices[0].message.content.strip()
+            content = response.choices[0].message.content.strip()
+            # যদি ক্যাপশন অসম্পূর্ণ মনে হয়, তবে একটি ডট যোগ করে পূর্ণতা দেওয়া
+            if len(content) > 100 and not content.endswith(('.', '!', '?', '#')):
+                content += "..."
+            return content
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক। 📜🎨"
+    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক। 📜🎨"
 
 def generate_image_and_data(client: InferenceClient):
-    # ১. বিষয় নির্বাচন
+    # ১. বিষয় নির্বাচন
     topic = random.choice(TOPIC_CATEGORIES)
     
-    # ২. প্রম্পট তৈরি (ছবির জন্য)
-    prompt_instr = f"Create a hyper-realistic, high-quality, atmospheric, detailed AI image prompt for: '{topic}'. Output ONLY the prompt."
+    # ২. প্রম্পট তৈরি
+    prompt_instr = f"Create a high-quality, detailed AI image prompt for: '{topic}'. Output ONLY the prompt."
     prompt = get_hf_text(client, prompt_instr, max_tokens=150)
     logger.info(f"Generated Prompt: {prompt}")
 
-    # ৩. ক্যাপশন তৈরি (ছবির প্রম্পটের ওপর ভিত্তি করে)
+    # ৩. ক্যাপশন তৈরি (স্ট্রং ইনস্ট্রাকশন)
     caption_instr = (
-        f"Context/Image Description: '{prompt}'. "
-        "Write a long, deeply immersive, storytelling-style Facebook caption in Bengali. "
-        "1. Start with an intriguing question or a legendary myth related to this image. "
-        "2. Describe the scene vividly, build a sense of wonder, mystery, and atmosphere. Tell a brief story or historical context. "
-        "3. Keep it emotional, engaging, and poetic. "
-        "4. End with 5-6 trending and highly relevant hashtags (Mix of Bengali and English). "
-        "Output ONLY the complete caption text."
+        f"Context: '{prompt}'. "
+        "Write a storytelling-style Facebook caption in Bengali. "
+        "Rules: 1. Start with an intriguing hook. 2. Describe the scene vividly and poetically. "
+        "3. Keep it within 3 short paragraphs. "
+        "4. End with 4-5 relevant hashtags. "
+        "5. IMPORTANT: Your response must be complete, do not leave sentences hanging."
     )
     caption = get_hf_text(client, caption_instr, max_tokens=600)
     
