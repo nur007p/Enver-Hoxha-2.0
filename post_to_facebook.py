@@ -8,6 +8,7 @@ import requests
 from huggingface_hub import InferenceClient
 from PIL import Image
 
+# লগের ফরম্যাট সেটআপ
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,6 @@ TARGET_IMAGE_SIZE = (1024, 768)
 TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct"]
 IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
 
-# আপডেটেড টপিক লিস্ট
 TOPIC_CATEGORIES = [
     "Ancient Lost Civilization", "Mysterious Historical Event",
     "Architectural Wonder of the Past", "Mythological Kingdom",
@@ -107,8 +107,20 @@ def post_to_facebook(image_bytes, caption, token, page_id):
     url = f"{FB_GRAPH_API}/{page_id}/photos"
     data = {"message": caption, "access_token": token}
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
-    resp = requests.post(url, data=data, files=files, timeout=90)
-    return "id" in resp.json()
+    
+    try:
+        resp = requests.post(url, data=data, files=files, timeout=90)
+        resp_data = resp.json()
+        
+        if "id" in resp_data:
+            logger.info(f"Successfully posted to Facebook! Post ID: {resp_data['id']}")
+            return True
+        else:
+            logger.error(f"Facebook API Error: {resp_data}")
+            return False
+    except Exception as e:
+        logger.error(f"Request failed: {e}")
+        return False
 
 def main():
     fb_token = os.environ.get("FB_PAGE_TOKEN")
@@ -116,15 +128,18 @@ def main():
     hf_token = os.environ.get("HF_TOKEN")
     
     if not all([fb_token, fb_page_id, hf_token]):
+        logger.error("Missing environment variables.")
         sys.exit(1)
 
     client = build_client(hf_token, os.environ.get("HF_PROVIDER", "auto"))
     
+    logger.info("Starting generation process...")
     topic = auto_generate_topic(client)
     prompt = generate_prompt(client, topic, os.environ.get("STYLE", ""))
     caption = generate_caption(client, prompt)
     img_bytes = generate_image_hf(client, prompt)
     
+    logger.info("Attempting to post to Facebook...")
     if not post_to_facebook(img_bytes, caption, fb_token, fb_page_id):
         sys.exit(1)
 
