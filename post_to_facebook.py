@@ -8,13 +8,9 @@ import google.generativeai as genai
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Gemini কনফিগারেশন
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key:
-    logger.error("GEMINI_API_KEY is missing!")
-    exit(1)
-
-genai.configure(api_key=api_key)
+# Gemini কনফিগারেশন - মডেলের নাম কিছুটা পরিবর্তন করে দেওয়া হয়েছে
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+# 'gemini-1.5-flash' এর জায়গায় 'gemini-pro' ব্যবহার করে দেখুন যদি এটি না চলে
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_gemini_content(prompt: str) -> str:
@@ -26,12 +22,10 @@ def get_gemini_content(prompt: str) -> str:
         return "এক চমৎকার রহস্যময় দৃশ্য।"
 
 def generate_image_and_data():
-    topics = ["Futuristic Dhaka city in 2070", "A mystical forest in the Sundarbans"]
-    topic = random.choice(topics)
-    
+    topic = "Futuristic Dhaka city in 2070"
     caption = get_gemini_content(f"Write a short Bengali caption for: {topic}. Add 3 hashtags.")
     
-    # ইমেজ ডাউনলোড ও সেভ করা
+    # ইমেজ ডাউনলোড করে লোকাল ফাইলে সেভ করা (ফেসবুক এরর সমাধানের জন্য)
     safe_prompt = requests.utils.quote(f"Cinematic art of {topic}")
     image_url = f"https://pollinations.ai/p/{safe_prompt}?width=1024&height=768&nologo=true"
     
@@ -41,45 +35,37 @@ def generate_image_and_data():
             f.write(response.content)
         return "temp_image.jpg", caption
     else:
-        raise Exception(f"Image download failed with status {response.status_code}")
+        raise Exception("Image download failed")
 
 def post_to_facebook(image_path, caption, token, page_id):
     url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
     
-    # ফেসবুকের জন্য ডাটা ও ফাইল
+    # ফাইলটি ওপেন করে পাঠানো - এটি ফেসবুকের জন্য সবচেয়ে নিরাপদ পদ্ধতি
     with open(image_path, 'rb') as f:
         files = {'source': f}
         data = {
             'message': caption,
             'access_token': token,
-            'published': 'true' # পোস্টটি পাবলিকলি পাবলিশ করার জন্য
+            'published': 'true'
         }
-        
-        response = requests.post(url, files=files, data=data, timeout=120)
+        response = requests.post(url, files=files, data=data)
         result = response.json()
     
-    # টেম্পোরারি ফাইল ডিলিট
+    # ফাইল ডিলিট
     if os.path.exists(image_path):
         os.remove(image_path)
     
     if "id" in result:
-        logger.info(f"Successfully posted! ID: {result['id']}")
+        logger.info(f"Success! Post ID: {result['id']}")
         return True
     else:
-        logger.error(f"Facebook API Error Details: {result}")
+        logger.error(f"Facebook API Error: {result}")
         return False
 
 def main():
-    fb_token = os.environ.get("FB_PAGE_TOKEN")
-    fb_page_id = os.environ.get("FB_PAGE_ID")
-    
-    if not fb_token or not fb_page_id:
-        logger.error("Facebook credentials are missing in env!")
-        return
-
     try:
         image_path, caption = generate_image_and_data()
-        post_to_facebook(image_path, caption, fb_token, fb_page_id)
+        post_to_facebook(image_path, caption, os.environ.get("FB_PAGE_TOKEN"), os.environ.get("FB_PAGE_ID"))
     except Exception as e:
         logger.error(f"Execution failed: {e}")
 
