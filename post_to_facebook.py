@@ -1,8 +1,3 @@
-"""
-Auto Facebook Poster - Optimized for GitHub Actions
-FileName: post_to_facebook.py
-"""
-
 import os
 import random
 import sys
@@ -19,7 +14,7 @@ logger = logging.getLogger(__name__)
 FB_GRAPH_API = "https://graph.facebook.com/v21.0"
 TARGET_IMAGE_SIZE = (1024, 768)
 
-TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"]
+TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct"]
 IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
 
 TOPIC_CATEGORIES = [
@@ -36,16 +31,11 @@ TOPIC_CATEGORIES = [
 ]
 
 ANGLE_HINTS = [
-    "from an unusual or creative camera angle",
-    "with dramatic, moody lighting",
-    "in a candid, everyday moment",
-    "with a unique and vivid color palette",
-    "with an interesting, well-balanced composition",
-    "showing fine detail and texture up close",
-    "during golden hour with warm light",
-    "with a cinematic, atmospheric mood",
-    "from a wide establishing shot perspective",
-    "with a minimalist, clean aesthetic",
+    "from an unusual or creative camera angle", "with dramatic, moody lighting",
+    "in a candid, everyday moment", "with a unique and vivid color palette",
+    "with an interesting, well-balanced composition", "showing fine detail and texture up close",
+    "during golden hour with warm light", "with a cinematic, atmospheric mood",
+    "from a wide establishing shot perspective", "with a minimalist, clean aesthetic",
 ]
 
 DEFAULT_CAPTION = "ইতিহাস আর কল্পনার পাতা থেকে এক রহস্যময় ঝলক... 📜🎨\n\n#History #Mystery #Fantasy"
@@ -53,107 +43,77 @@ DEFAULT_CAPTION = "ইতিহাস আর কল্পনার পাতা 
 def build_client(hf_token: str, hf_provider: str) -> InferenceClient:
     try:
         return InferenceClient(token=hf_token, provider=hf_provider, timeout=180)
-    except TypeError:
+    except Exception:
         return InferenceClient(token=hf_token)
 
-def _is_rate_limited(error: Exception) -> bool:
-    msg = str(error).lower()
-    return "429" in msg or "rate limit" in msg or "too many requests" in msg
-
-def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 250) -> str:
-    last_error = None
+def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 400) -> str:
     for model in TEXT_MODELS:
-        for attempt in range(3):
-            try:
-                response = client.chat_completion(
-                    model=model,
-                    messages=[{"role": "user", "content": instruction}],
-                    max_tokens=max_tokens,
-                    temperature=0.7,
-                )
-                result = response.choices[0].message.content
-                if result:
-                    return result.strip()
-            except Exception as e:
-                last_error = e
-                if _is_rate_limited(e):
-                    break
-                time.sleep(8 * (attempt + 1))
-    raise RuntimeError(f"টেক্সট জেনারেশন ব্যর্থ। সর্বশেষ এরর: {last_error}")
+        try:
+            response = client.chat_completion(
+                model=model,
+                messages=[{"role": "user", "content": instruction}],
+                max_tokens=max_tokens,
+                temperature=0.7,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.warning(f"Model {model} failed: {e}")
+            continue
+    return DEFAULT_CAPTION
 
 def auto_generate_topic(client: InferenceClient) -> str:
     chosen_cat = random.choice(TOPIC_CATEGORIES)
-    instruction = (
-        f"Give me exactly one interesting, specific, and unique image idea/topic about a '{chosen_cat}'. "
-        "Output ONLY the topic name, no quotes."
-    )
-    return get_hf_text(client, instruction, max_tokens=50)
+    instruction = f"Give me exactly one unique image topic related to '{chosen_cat}'. Output ONLY the topic name."
+    return get_hf_text(client, instruction, max_tokens=30)
 
 def generate_prompt(client: InferenceClient, topic: str, style: str) -> str:
     hint = random.choice(ANGLE_HINTS)
-    instruction = (
-        "Generate a detailed, creative image prompt related to "
-        f'"{topic}", {hint}. Output ONLY the prompt text.'
-    )
-    prompt = get_hf_text(client, instruction, max_tokens=150)
-    return f"{prompt}, {style}" if style else prompt
+    instruction = f"Generate a detailed, creative image generation prompt for: '{topic}', {hint}. Output ONLY the prompt."
+    return get_hf_text(client, instruction, max_tokens=150)
 
 def generate_caption(client: InferenceClient, prompt_text: str) -> str:
+    # প্রম্পটটিকে ইনপুট হিসেবে দিয়ে ক্যাপশন জেনারেট করা হচ্ছে যাতে সামঞ্জস্য থাকে
     instruction = (
-        "Write a highly engaging, storytelling-style Facebook caption in Bengali. "
-        "The caption should start with an emotional hook or a mysterious question about the image, "
-        "followed by a short, descriptive narrative. "
-        "Maintain a professional yet warm tone. "
-        "Add 2-3 relevant emojis (like 📜, 🏛️, 🎨, ✨) appropriately. "
-        "Include 3-4 trending and highly relevant English hashtags at the end. "
-        "Do not use AI-related hashtags. Output ONLY the caption and tags."
+        f"Based on this image description: '{prompt_text}', write a catchy, storytelling-style "
+        "Facebook caption in Bengali. Start with a mysterious hook or question. "
+        "Include 2-3 relevant emojis. End with 3 trending hashtags. "
+        "Output ONLY the caption text."
     )
-    try:
-        caption = get_hf_text(client, instruction, max_tokens=250)
-        return caption.strip('"').strip("'")
-    except:
-        return DEFAULT_CAPTION
-
-def _encode_for_facebook(image: Image.Image, max_bytes: int = 4 * 1024 * 1024) -> bytes:
-    image = image.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS)
-    for quality in (85, 75, 65, 55):
-        buf = io.BytesIO()
-        image.save(buf, format="JPEG", quality=quality)
-        data = buf.getvalue()
-        if len(data) <= max_bytes: return data
-    return data
+    return get_hf_text(client, instruction, max_tokens=350)
 
 def generate_image_hf(client: InferenceClient, prompt: str) -> bytes:
     for model in IMAGE_MODELS:
         try:
             raw = client.text_to_image(prompt, model=model)
             img = raw if isinstance(raw, Image.Image) else Image.open(io.BytesIO(raw))
-            return _encode_for_facebook(img)
+            # Image encoding
+            buf = io.BytesIO()
+            img.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS).save(buf, format="JPEG", quality=85)
+            return buf.getvalue()
         except Exception:
-            time.sleep(10)
-    raise RuntimeError("ছবি জেনারেশন ব্যর্থ।")
+            continue
+    raise RuntimeError("ছবি তৈরি করা সম্ভব হয়নি।")
 
-def post_to_facebook(image_bytes: bytes, caption: str, token: str, page_id: str) -> bool:
+def post_to_facebook(image_bytes, caption, token, page_id):
     url = f"{FB_GRAPH_API}/{page_id}/photos"
-    try:
-        resp = requests.post(url, data={"message": caption, "access_token": token}, 
-                             files={"source": ("image.jpg", image_bytes, "image/jpeg")}, timeout=90)
-        return "id" in resp.json()
-    except:
-        return False
+    data = {"message": caption, "access_token": token}
+    files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
+    resp = requests.post(url, data=data, files=files, timeout=90)
+    return "id" in resp.json()
 
 def main():
-    fb_token = os.environ.get("FB_PAGE_TOKEN", "").strip()
-    fb_page_id = os.environ.get("FB_PAGE_ID", "").strip()
-    hf_token = os.environ.get("HF_TOKEN", "").strip()
+    fb_token = os.environ.get("FB_PAGE_TOKEN")
+    fb_page_id = os.environ.get("FB_PAGE_ID")
+    hf_token = os.environ.get("HF_TOKEN")
     
     if not all([fb_token, fb_page_id, hf_token]):
         sys.exit(1)
 
     client = build_client(hf_token, os.environ.get("HF_PROVIDER", "auto"))
+    
     topic = auto_generate_topic(client)
     prompt = generate_prompt(client, topic, os.environ.get("STYLE", ""))
-    caption = generate_caption(client, prompt)
+    caption = generate_caption(client, prompt) # প্রম্পট থেকে ক্যাপশন তৈরি
     img_bytes = generate_image_hf(client, prompt)
     
     if not post_to_facebook(img_bytes, caption, fb_token, fb_page_id):
