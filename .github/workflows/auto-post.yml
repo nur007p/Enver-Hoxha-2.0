@@ -27,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # নিশ্চিত করুন যে requirements.txt এ google-generativeai, requests, pillow আছে
-          pip install google-generativeai requests pillow
+          # নিশ্চিত করুন যে requirements.txt এ google-genai, requests, pillow আছে
+          pip install google-genai requests pillow
 
       - name: Generate image, caption & post to Facebook
         env:
