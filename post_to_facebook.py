@@ -9,11 +9,11 @@ import google.generativeai as genai
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Gemini কনফিগারেশন
+# Gemini কনফিগারেশন - নতুন লাইব্রেরি ব্যবহার করা হচ্ছে
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# মডেল আপডেট: gemini-1.5-flash-latest ব্যবহার করুন
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+# মডেল আপডেট: gemini-1.5-flash ব্যবহার করুন
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 def get_gemini_content(prompt: str) -> str:
     try:
@@ -24,36 +24,24 @@ def get_gemini_content(prompt: str) -> str:
         return "এক চমৎকার রহস্যময় দৃশ্য।"
 
 def generate_image_and_data():
-    # র্যান্ডম টপিক
-    topics = [
-        "Futuristic Dhaka city in 2070", 
-        "A hidden village in the Himalayas",
-        "A mystical forest in the Sundarbans", 
-        "Cyberpunk rickshaw in rainy street"
-    ]
+    topics = ["Futuristic Dhaka city in 2070", "A mystical forest in the Sundarbans"]
     topic = random.choice(topics)
     
-    # ক্যাপশন তৈরি (Gemini দিয়ে)
-    caption_prompt = f"Write an engaging Facebook caption in Bengali about: {topic}. Keep it short and add 4 relevant hashtags."
-    caption = get_gemini_content(caption_prompt)
+    caption = get_gemini_content(f"Write a short Bengali caption for: {topic}. Add 3 hashtags.")
     
-    # ইমেজ জেনারেশন (Pollinations.ai দিয়ে)
-    # প্রম্পটটি URL এনকোড করা জরুরি
-    safe_prompt = requests.utils.quote(f"Professional cinematic art of {topic}")
-    image_url = f"https://pollinations.ai/p/{safe_prompt}?width=1024&height=768&nologo=true&seed={random.randint(1, 10000)}"
+    safe_prompt = requests.utils.quote(f"Cinematic art of {topic}")
+    image_url = f"https://pollinations.ai/p/{safe_prompt}?width=1024&height=768&nologo=true"
     
-    logger.info(f"Downloading image from: {image_url}")
-    image_response = requests.get(image_url, timeout=60)
-    
-    if image_response.status_code == 200:
-        return image_response.content, caption
+    response = requests.get(image_url, timeout=60)
+    if response.status_code == 200:
+        return response.content, caption
     else:
-        raise Exception(f"Failed to generate image: {image_response.status_code}")
+        raise Exception("Image download failed")
 
 def post_to_facebook(image_bytes, caption, token, page_id):
     url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
     
-    # ফাইল আপলোডের জন্য সঠিক ফরম্যাট
+    # ইমেজ বাইটসকে ফাইল হিসেবে পাঠানোর নিয়ম
     files = {
         'source': ('image.jpg', image_bytes, 'image/jpeg')
     }
@@ -62,32 +50,19 @@ def post_to_facebook(image_bytes, caption, token, page_id):
         'access_token': token
     }
     
-    logger.info("Uploading to Facebook...")
-    response = requests.post(url, files=files, data=data, timeout=90)
+    response = requests.post(url, files=files, data=data)
     result = response.json()
     
     if "id" in result:
-        logger.info(f"Successfully posted! Post ID: {result['id']}")
+        logger.info(f"Success! ID: {result['id']}")
         return True
     else:
         logger.error(f"Facebook API Error: {result}")
         return False
 
 def main():
-    fb_token = os.environ.get("FB_PAGE_TOKEN")
-    fb_page_id = os.environ.get("FB_PAGE_ID")
-    
-    if not all([fb_token, fb_page_id, os.environ.get("GEMINI_API_KEY")]):
-        logger.error("Missing Environment Variables!")
-        sys.exit(1)
-
-    try:
-        img_bytes, caption = generate_image_and_data()
-        if not post_to_facebook(img_bytes, caption, fb_token, fb_page_id):
-            sys.exit(1)
-    except Exception as e:
-        logger.error(f"Process failed: {e}")
-        sys.exit(1)
+    img_bytes, caption = generate_image_and_data()
+    post_to_facebook(img_bytes, caption, os.environ.get("FB_PAGE_TOKEN"), os.environ.get("FB_PAGE_ID"))
 
 if __name__ == "__main__":
     main()
