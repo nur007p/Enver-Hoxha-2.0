@@ -9,12 +9,12 @@ from huggingface_hub import InferenceClient
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# ফ্রি টায়ারের উপযোগী মডেল
-TEXT_MODEL = "Qwen/Qwen2.5-72B-Instruct" 
-IMAGE_MODEL = "stabilityai/stable-diffusion-2-1"
+# সঠিক ফ্রি মডেল আইডি
+TEXT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3" 
+IMAGE_MODEL = "runwayml/stable-diffusion-v1-5"
 
 def generate_content(hf_token):
-    # api_key ব্যবহার করা ভালো প্র্যাকটিস
+    # api_key ব্যবহার করা উত্তম
     client = InferenceClient(api_key=hf_token)
     topics = ["Ancient ruins", "Mysterious forest", "Futuristic city"]
     topic = random.choice(topics)
@@ -27,9 +27,9 @@ def generate_content(hf_token):
     caption = chat_resp.choices[0].message.content.strip()
 
     # ইমেজ জেনারেশন
+    # সরাসরি client ব্যবহার করা হচ্ছে
     image = client.text_to_image(prompt=topic, model=IMAGE_MODEL)
     
-    # মেমোরিতে ইমেজ সেভ করা
     buf = io.BytesIO()
     image.convert("RGB").resize((1024, 1024)).save(buf, format="JPEG")
     
