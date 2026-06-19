@@ -15,9 +15,8 @@ IMAGE_MODEL = "runwayml/stable-diffusion-v1-5"
 
 def generate_content(hf_token):
     client = InferenceClient(api_key=hf_token)
-    topics = ["Ancient ruins in a misty forest", "A futuristic cyberpunk city", "A serene traditional village"]
-    topic = random.choice(topics)
-
+    topic = random.choice(["Ancient ruins", "Mysterious forest", "Futuristic city"])
+    
     # টেক্সট জেনারেশন
     chat_resp = client.chat_completion(
         model=TEXT_MODEL,
@@ -33,24 +32,22 @@ def generate_content(hf_token):
     return buf.getvalue(), caption
 
 def post_to_facebook(image_bytes, caption, fb_token, page_id):
-    # ফেসবুক গ্রাফ এপিআই এর মাধ্যমে পোস্ট করা
     url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
     data = {
-        "message": caption,
+        "message": caption, 
         "access_token": fb_token,
-        "published": "true" # নিশ্চিত করা হচ্ছে পোস্টটি পাবলিশ হবে
+        "published": "true"
     }
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
     
+    # ফেসবুকের রিপ্লাই ক্যাপচার করা
     resp = requests.post(url, data=data, files=files)
     result = resp.json()
     
-    # ফেসবুকের আসল রিপ্লাই লগ করা
-    logger.info(f"ফেসবুক এপিআই রেসপন্স: {result}")
+    # এটি লগে দেখাবে ফেসবুক কেন পোস্ট নিচ্ছে না (বা আইডি দিচ্ছে)
+    logger.info(f"Facebook API Response: {result}")
     
-    if "id" in result:
-        return True, result["id"]
-    return False, result
+    return "id" in result
 
 def main():
     fb_token = os.environ.get("FB_PAGE_TOKEN")
@@ -58,19 +55,17 @@ def main():
     hf_token = os.environ.get("HF_TOKEN")
 
     if not all([fb_token, page_id, hf_token]):
-        logger.error("এনভায়রনমেন্ট ভেরিয়েবল মিসিং!")
+        logger.error("Environment variables missing!")
         return
 
     try:
         img_data, caption = generate_content(hf_token)
-        success, post_id = post_to_facebook(img_data, caption, fb_token, page_id)
-        
-        if success:
-            logger.info(f"সফলভাবে পোস্ট করা হয়েছে! পোস্ট আইডি: {post_id}")
+        if post_to_facebook(img_data, caption, fb_token, page_id):
+            logger.info("Successfully posted!")
         else:
-            logger.error(f"পোস্ট করা যায়নি। ফেসবুকের এরর: {post_id}")
+            logger.error("Facebook post failed.")
     except Exception as e:
-        logger.error(f"কোডে এরর: {e}")
+        logger.error(f"Error in main: {e}")
 
 if __name__ == "__main__":
     main()
