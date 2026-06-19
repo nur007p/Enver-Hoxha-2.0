@@ -17,6 +17,7 @@ TARGET_IMAGE_SIZE = (1024, 768)
 TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct"]
 IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
 
+# আপডেটেড টপিক লিস্ট
 TOPIC_CATEGORIES = [
     "Ancient Lost Civilization", "Mysterious Historical Event",
     "Architectural Wonder of the Past", "Mythological Kingdom",
@@ -27,7 +28,16 @@ TOPIC_CATEGORIES = [
     "Ancient Scientific Innovation", "Nature's Hidden Paradise",
     "Majestic Wildlife in Wild Habitat", "Floating Islands in the Sky",
     "Forgotten Treasure in a Jungle", "Bioluminescent Enchanted Forest",
-    "Intergalactic Trading Space Station", "Zen Temple on a Misty Mountain"
+    "Post-Apocalyptic Dhaka City Overgrown with Nature",
+    "Ancient Bengali Folklore Creature in a Modern Setting",
+    "Conceptual Art of Time Travel Mechanism",
+    "Submerged Majestic Temple in a Clear Blue Lake",
+    "Steampunk Version of Traditional Rickshaw",
+    "Breathtaking Sunset over a Futuristic Himalayan Village",
+    "Mythical Sea Serpent Emerging from the Bay of Bengal",
+    "Ancient Library Protected by Magical Creatures",
+    "Cybernetic Samurai in a Bamboo Forest",
+    "Ethereal Spirit of the Sundarbans Mangrove"
 ]
 
 ANGLE_HINTS = [
@@ -63,20 +73,20 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 400
 
 def auto_generate_topic(client: InferenceClient) -> str:
     chosen_cat = random.choice(TOPIC_CATEGORIES)
-    instruction = f"Give me exactly one unique image topic related to '{chosen_cat}'. Output ONLY the topic name."
-    return get_hf_text(client, instruction, max_tokens=30)
+    instruction = f"Give me exactly one unique, vivid image scene idea based on '{chosen_cat}'. Output ONLY the scene description."
+    return get_hf_text(client, instruction, max_tokens=50)
 
 def generate_prompt(client: InferenceClient, topic: str, style: str) -> str:
     hint = random.choice(ANGLE_HINTS)
-    instruction = f"Generate a detailed, creative image generation prompt for: '{topic}', {hint}. Output ONLY the prompt."
+    instruction = f"Create a high-quality, detailed AI image prompt for: '{topic}', {hint}. {style} Output ONLY the prompt."
     return get_hf_text(client, instruction, max_tokens=150)
 
 def generate_caption(client: InferenceClient, prompt_text: str) -> str:
-    # প্রম্পটটিকে ইনপুট হিসেবে দিয়ে ক্যাপশন জেনারেট করা হচ্ছে যাতে সামঞ্জস্য থাকে
     instruction = (
-        f"Based on this image description: '{prompt_text}', write a catchy, storytelling-style "
-        "Facebook caption in Bengali. Start with a mysterious hook or question. "
-        "Include 2-3 relevant emojis. End with 3 trending hashtags. "
+        f"Image context: '{prompt_text}'. Write a captivating, storytelling-style Facebook caption in Bengali. "
+        "Start with an intriguing question or mystery related to the image. "
+        "Keep it emotional and engaging. Add 2-3 relevant emojis. "
+        "End with 3-4 trending and highly relevant hashtags. "
         "Output ONLY the caption text."
     )
     return get_hf_text(client, instruction, max_tokens=350)
@@ -86,13 +96,12 @@ def generate_image_hf(client: InferenceClient, prompt: str) -> bytes:
         try:
             raw = client.text_to_image(prompt, model=model)
             img = raw if isinstance(raw, Image.Image) else Image.open(io.BytesIO(raw))
-            # Image encoding
             buf = io.BytesIO()
             img.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS).save(buf, format="JPEG", quality=85)
             return buf.getvalue()
         except Exception:
             continue
-    raise RuntimeError("ছবি তৈরি করা সম্ভব হয়নি।")
+    raise RuntimeError("Image generation failed.")
 
 def post_to_facebook(image_bytes, caption, token, page_id):
     url = f"{FB_GRAPH_API}/{page_id}/photos"
@@ -113,7 +122,7 @@ def main():
     
     topic = auto_generate_topic(client)
     prompt = generate_prompt(client, topic, os.environ.get("STYLE", ""))
-    caption = generate_caption(client, prompt) # প্রম্পট থেকে ক্যাপশন তৈরি
+    caption = generate_caption(client, prompt)
     img_bytes = generate_image_hf(client, prompt)
     
     if not post_to_facebook(img_bytes, caption, fb_token, fb_page_id):
