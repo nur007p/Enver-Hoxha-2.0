@@ -15,7 +15,15 @@ FB_GRAPH_API = "https://graph.facebook.com/v21.0"
 TARGET_IMAGE_SIZE = (1024, 768)
 
 TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct"]
-IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
+
+# ফ্রি, hf-inference (HF এর নিজের সার্ভার) দিয়ে চলে এমন ইমেজ মডেল।
+# এদের জন্য কোনো third-party (fal-ai/nscale/replicate) বিলিং লাগে না।
+IMAGE_MODELS = [
+    "stabilityai/stable-diffusion-xl-base-1.0",
+    "stabilityai/stable-diffusion-2-1",
+    "prompthero/openjourney-v4",
+    "runwayml/stable-diffusion-v1-5",
+]
 
 # ৫০টি টপিকের তালিকা
 TOPIC_CATEGORIES = [
@@ -47,7 +55,9 @@ TOPIC_CATEGORIES = [
 ]
 
 def build_client(hf_token: str) -> InferenceClient:
-    return InferenceClient(token=hf_token)
+    # provider="hf-inference" মানে HF এর নিজের ফ্রি serverless infra ব্যবহার হবে,
+    # fal-ai / nscale / replicate এর মত paid third-party provider নয়।
+    return InferenceClient(token=hf_token, provider="hf-inference")
 
 def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 800) -> str:
     for model in TEXT_MODELS:
@@ -60,16 +70,16 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 800
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            logger.warning(f"Model {model} failed: {e}")
-    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক।"
+            logger.warning(f"Text model {model} failed: {e}")
+    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক।"
 
 def generate_image_and_data(client: InferenceClient):
     topic = random.choice(TOPIC_CATEGORIES)
-    
+
     # প্রম্পট জেনারেশন
     prompt_instr = f"Create a descriptive, high-quality AI image prompt for: '{topic}'. Output ONLY the prompt."
     prompt = get_hf_text(client, prompt_instr, max_tokens=150)
-    
+
     # ক্যাপশন জেনারেশন
     caption_instr = (
         f"Image Subject: '{prompt}'. "
@@ -80,26 +90,33 @@ def generate_image_and_data(client: InferenceClient):
         "IMPORTANT: The response MUST be complete. Do not truncate the end of the text."
     )
     caption = get_hf_text(client, caption_instr, max_tokens=400)
-    
-    # ইমেজ জেনারেশন
+
+    # ইমেজ জেনারেশন — প্রতিটি মডেলের আসল এরর লগ করা হচ্ছে, যাতে কোনোটা ফেইল
+    # করলে সঠিক কারণ (যেমন 402, 503 cold-start, ইত্যাদি) ধরা যায়।
+    last_error = None
     for model in IMAGE_MODELS:
         try:
+            logger.info(f"Trying image model: {model}")
             raw = client.text_to_image(prompt, model=model)
             img = raw if isinstance(raw, Image.Image) else Image.open(io.BytesIO(raw))
             buf = io.BytesIO()
             img.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS).save(buf, format="JPEG", quality=90)
+            logger.info(f"Image generated successfully with model: {model}")
             return buf.getvalue(), caption
-        except Exception:
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Image model {model} failed: {e}")
             continue
-    raise RuntimeError("Image generation failed.")
+
+    raise RuntimeError(f"Image generation failed on all models. Last error: {last_error}")
 
 def post_to_facebook(image_bytes, caption, token, page_id):
     url = f"{FB_GRAPH_API}/{page_id}/photos"
-    
+
     # সঠিক ফরম্যাট: data এবং files আলাদা প্যারামিটার হিসেবে যাবে
     data = {"message": caption, "access_token": token}
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
-    
+
     try:
         resp = requests.post(url, data=data, files=files, timeout=90)
         result = resp.json()
@@ -117,14 +134,14 @@ def main():
     fb_token = os.environ.get("FB_PAGE_TOKEN")
     fb_page_id = os.environ.get("FB_PAGE_ID")
     hf_token = os.environ.get("HF_TOKEN")
-    
+
     if not all([fb_token, fb_page_id, hf_token]):
         logger.error("Environment variables missing.")
         sys.exit(1)
 
     client = build_client(hf_token)
     img_bytes, caption = generate_image_and_data(client)
-    
+
     if not post_to_facebook(img_bytes, caption, fb_token, fb_page_id):
         sys.exit(1)
 
