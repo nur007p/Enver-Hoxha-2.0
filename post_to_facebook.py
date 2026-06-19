@@ -5,34 +5,31 @@ import logging
 import requests
 from huggingface_hub import InferenceClient
 
-# লগের ফরম্যাট সেটআপ
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# সঠিক ফ্রি মডেল আইডি
-TEXT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3" 
-IMAGE_MODEL = "runwayml/stable-diffusion-v1-5"
-
 def generate_content(hf_token):
-    # api_key ব্যবহার করা উত্তম
+    # সবচাইতে নির্ভরযোগ্য ফ্রি মডেল এবং এন্ডপয়েন্ট
     client = InferenceClient(api_key=hf_token)
-    topics = ["Ancient ruins", "Mysterious forest", "Futuristic city"]
+    
+    # বিষয়বস্তু নির্বাচন
+    topics = ["Ancient ruins in a misty forest", "A futuristic cyberpunk city", "A serene traditional village"]
     topic = random.choice(topics)
 
-    # টেক্সট জেনারেশন
+    # ১. টেক্সট জেনারেশন (সহজ উপায়ে)
+    text_model = "Qwen/Qwen2.5-72B-Instruct"
     chat_resp = client.chat_completion(
-        model=TEXT_MODEL,
-        messages=[{"role": "user", "content": f"Write a short Bengali caption about {topic}. Add 3 hashtags."}]
+        model=text_model,
+        messages=[{"role": "user", "content": f"Write a 3-sentence Bengali caption about {topic}. Add hashtags."}]
     )
     caption = chat_resp.choices[0].message.content.strip()
 
-    # ইমেজ জেনারেশন
-    # সরাসরি client ব্যবহার করা হচ্ছে
-    image = client.text_to_image(prompt=topic, model=IMAGE_MODEL)
+    # ২. ইমেজ জেনারেশন (সবচেয়ে স্টেবল ফ্রি মডেল)
+    image_model = "runwayml/stable-diffusion-v1-5"
+    image = client.text_to_image(prompt=topic, model=image_model)
     
     buf = io.BytesIO()
-    image.convert("RGB").resize((1024, 1024)).save(buf, format="JPEG")
-    
+    image.convert("RGB").resize((1080, 1080)).save(buf, format="JPEG")
     return buf.getvalue(), caption
 
 def post_to_facebook(image_bytes, caption, fb_token, page_id):
@@ -41,7 +38,12 @@ def post_to_facebook(image_bytes, caption, fb_token, page_id):
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
     
     resp = requests.post(url, data=data, files=files)
-    return resp.status_code == 200
+    if resp.status_code == 200:
+        logger.info("পাবলিশ হয়েছে!")
+        return True
+    else:
+        logger.error(f"ফেসবুক এরর: {resp.text}")
+        return False
 
 def main():
     fb_token = os.environ.get("FB_PAGE_TOKEN")
@@ -49,12 +51,14 @@ def main():
     hf_token = os.environ.get("HF_TOKEN")
 
     if not all([fb_token, page_id, hf_token]):
-        logger.error("Environment variables missing.")
+        logger.error("টোকেন বা আইডি মিসিং!")
         return
 
-    img_data, caption = generate_content(hf_token)
-    if post_to_facebook(img_data, caption, fb_token, page_id):
-        logger.info("Successfully posted!")
+    try:
+        img_data, caption = generate_content(hf_token)
+        post_to_facebook(img_data, caption, fb_token, page_id)
+    except Exception as e:
+        logger.error(f"মেইন ফাংশন এরর: {e}")
 
 if __name__ == "__main__":
     main()
