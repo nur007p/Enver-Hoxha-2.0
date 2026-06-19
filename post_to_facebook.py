@@ -17,7 +17,6 @@ TARGET_IMAGE_SIZE = (1024, 768)
 TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct"]
 IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
 
-# ৫০টি টপিকের তালিকা
 TOPIC_CATEGORIES = [
     "Ancient Lost Civilization in the Amazon", "Mysterious Historical Event from 19th Century",
     "Architectural Wonder of a Lost Empire", "Mythological Kingdom Under the Sea",
@@ -56,64 +55,56 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 800
                 model=model,
                 messages=[{"role": "user", "content": instruction}],
                 max_tokens=max_tokens,
-                temperature=0.6,
+                temperature=0.5, # তাপমাত্রা কমানো হয়েছে যাতে লেখা আরও সুসংগত হয়
             )
-            content = response.choices[0].message.content.strip()
-            if len(content) > 100 and not content.endswith(('.', '!', '?', '#')):
-                content += "..."
-            return content
+            return response.choices[0].message.content.strip()
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক। 📜🎨"
+    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক।"
 
 def generate_image_and_data(client: InferenceClient):
     topic = random.choice(TOPIC_CATEGORIES)
     
-    # ২. প্রম্পট তৈরি
-    prompt_instr = f"Create a high-quality, detailed AI image prompt for: '{topic}'. Output ONLY the prompt."
+    # প্রম্পট জেনারেশন
+    prompt_instr = f"Create a descriptive, high-quality AI image prompt for: '{topic}'. Output ONLY the prompt."
     prompt = get_hf_text(client, prompt_instr, max_tokens=150)
-    logger.info(f"Generated Prompt: {prompt}")
-
-    # ৩. ক্যাপশন তৈরি
-    caption_instr = (
-        f"Context: '{prompt}'. "
-        "Write a storytelling-style Facebook caption in Bengali. "
-        "Rules: 1. Start with an intriguing hook. 2. Describe the scene vividly and poetically. "
-        "3. Keep it within 3 short paragraphs. "
-        "4. End with 4-5 relevant hashtags. "
-        "5. IMPORTANT: Your response must be complete, do not leave sentences hanging."
-    )
-    caption = get_hf_text(client, caption_instr, max_tokens=600)
     
-    # ৪. ছবি তৈরি
+    # ছবির সাথে মিল রেখে ক্যাপশন জেনারেশন
+    caption_instr = (
+        f"Image Subject: '{prompt}'. "
+        "Write a natural, storytelling-style Facebook caption in Bengali. "
+        "Rules: 1. Start with a hook. 2. Describe the scene vividly without using robotic or difficult words. "
+        "3. Keep it within 3-4 short, flowing sentences. "
+        "4. End with 4-5 relevant hashtags. "
+        "IMPORTANT: The response MUST be complete. Do not truncate the end of the text."
+    )
+    caption = get_hf_text(client, caption_instr, max_tokens=400)
+    
+    # ইমেজ জেনারেশন
     for model in IMAGE_MODELS:
         try:
             raw = client.text_to_image(prompt, model=model)
             img = raw if isinstance(raw, Image.Image) else Image.open(io.BytesIO(raw))
             buf = io.BytesIO()
-            img.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS).save(buf, format="JPEG", quality=85)
+            img.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS).save(buf, format="JPEG", quality=90)
             return buf.getvalue(), caption
-        except Exception as e:
-            logger.warning(f"Image generation failed with {model}: {e}")
+        except Exception:
             continue
     raise RuntimeError("Image generation failed.")
 
 def post_to_facebook(image_bytes, caption, token, page_id):
     url = f"{FB_GRAPH_API}/{page_id}/photos"
+    # ক্যাপশন ও ছবির মিলের জন্য লগার চেক
+    logger.info(f"Posting Caption: {caption}")
+    
     data = {"message": caption, "access_token": token}
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
     
     try:
-        resp = requests.post(url, data=data, files=files, timeout=90)
+        resp = requests.post(url, data=files, data=data, timeout=90)
         result = resp.json()
-        if "id" in result:
-            logger.info(f"Successfully posted! Post ID: {result['id']}")
-            return True
-        else:
-            logger.error(f"Facebook API Error: {result}")
-            return False
-    except Exception as e:
-        logger.error(f"Request failed: {e}")
+        return "id" in result
+    except:
         return False
 
 def main():
@@ -122,7 +113,6 @@ def main():
     hf_token = os.environ.get("HF_TOKEN")
     
     if not all([fb_token, fb_page_id, hf_token]):
-        logger.error("Missing environment variables.")
         sys.exit(1)
 
     client = build_client(hf_token)
