@@ -15,9 +15,10 @@ FB_GRAPH_API = "https://graph.facebook.com/v21.0"
 TARGET_IMAGE_SIZE = (1024, 768)
 
 TEXT_MODELS = ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct"]
-IMAGE_MODELS = ["black-forest-labs/FLUX.1-schnell", "black-forest-labs/FLUX.1-dev"]
+# মডেল পরিবর্তন করা হয়েছে যা ফ্রি টায়ারে কাজ করে
+IMAGE_MODELS = ["stabilityai/stable-diffusion-xl-base-1.0"]
 
-# ৫০টি টপিকের তালিকা
+# ৫০টি টপিকের তালিকা (একই রাখা হয়েছে)
 TOPIC_CATEGORIES = [
     "Ancient Lost Civilization in the Amazon", "Mysterious Historical Event from 19th Century",
     "Architectural Wonder of a Lost Empire", "Mythological Kingdom Under the Sea",
@@ -61,7 +62,7 @@ def get_hf_text(client: InferenceClient, instruction: str, max_tokens: int = 800
             return response.choices[0].message.content.strip()
         except Exception as e:
             logger.warning(f"Model {model} failed: {e}")
-    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক।"
+    return "রহস্যময় এই দৃশ্যটি আপনার কল্পনাকে রাঙিয়ে তুলুক।"
 
 def generate_image_and_data(client: InferenceClient):
     topic = random.choice(TOPIC_CATEGORIES)
@@ -77,7 +78,7 @@ def generate_image_and_data(client: InferenceClient):
         "Rules: 1. Start with a hook. 2. Describe the scene vividly without using robotic or difficult words. "
         "3. Keep it within 3-4 short, flowing sentences. "
         "4. End with 4-5 relevant hashtags. "
-        "IMPORTANT: The response MUST be complete. Do not truncate the end of the text."
+        "IMPORTANT: The response MUST be complete."
     )
     caption = get_hf_text(client, caption_instr, max_tokens=400)
     
@@ -89,14 +90,14 @@ def generate_image_and_data(client: InferenceClient):
             buf = io.BytesIO()
             img.convert("RGB").resize(TARGET_IMAGE_SIZE, Image.LANCZOS).save(buf, format="JPEG", quality=90)
             return buf.getvalue(), caption
-        except Exception:
+        except Exception as e:
+            logger.error(f"Image generation failed for {model}: {e}")
             continue
     raise RuntimeError("Image generation failed.")
 
 def post_to_facebook(image_bytes, caption, token, page_id):
     url = f"{FB_GRAPH_API}/{page_id}/photos"
     
-    # সঠিক ফরম্যাট: data এবং files আলাদা প্যারামিটার হিসেবে যাবে
     data = {"message": caption, "access_token": token}
     files = {"source": ("image.jpg", image_bytes, "image/jpeg")}
     
