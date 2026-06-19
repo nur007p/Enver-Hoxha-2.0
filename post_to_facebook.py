@@ -1,72 +1,45 @@
 import os
-import random
-import logging
 import requests
-import google.generativeai as genai
+import logging
+from google import genai  # নতুন লাইব্রেরি
+from google.genai import types
 
 # লগিং সেটআপ
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Gemini কনফিগারেশন - মডেলের নাম স্থিতিশীল রাখা হয়েছে
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-flash')
+# নতুন এসডিকে (SDK) দিয়ে ক্লায়েন্ট তৈরি
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-def get_gemini_content(prompt: str) -> str:
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        logger.error(f"Gemini API Error: {e}")
-        return "এক চমৎকার রহস্যময় দৃশ্য।"
+def generate_caption():
+    # নতুন মডেল ব্যবহার (gemini-2.0-flash বা gemini-1.5-flash)
+    response = client.models.generate_content(
+        model='gemini-1.5-flash',
+        contents="Write a short engaging Bengali Facebook caption for a futuristic city. Add 3 hashtags.",
+    )
+    return response.text
 
-def generate_image_and_data():
-    topic = "Futuristic Dhaka city in 2070"
-    caption = get_gemini_content(f"Write a short Bengali caption for: {topic}. Add 3 hashtags.")
+def post_to_facebook(caption):
+    # ইমেজ ডাউনলোড ও লোকাল ফাইলে সেভ করা (ফেসবুকের এরর সমাধানের জন্য)
+    image_url = "https://pollinations.ai/p/futuristic_city_2070?width=1024&height=768&nologo=true"
+    img_response = requests.get(image_url)
     
-    # ইমেজ ডাউনলোড করে লোকাল ফাইলে সেভ করা (ফেসবুক এরর সমাধানের জন্য)
-    safe_prompt = requests.utils.quote(f"Cinematic art of {topic}")
-    image_url = f"https://pollinations.ai/p/{safe_prompt}?width=1024&height=768&nologo=true"
-    
-    response = requests.get(image_url, timeout=60)
-    if response.status_code == 200:
-        with open("temp_image.jpg", "wb") as f:
-            f.write(response.content)
-        return "temp_image.jpg", caption
-    else:
-        raise Exception("Image download failed")
+    with open("image.jpg", "wb") as f:
+        f.write(img_response.content)
 
-def post_to_facebook(image_path, caption, token, page_id):
-    url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
+    # ফেসবুক এপিআই আপলোড
+    url = f"https://graph.facebook.com/v21.0/{os.environ.get('FB_PAGE_ID')}/photos"
     
-    # ফাইলটি ওপেন করে পাঠানো - এটি ফেসবুকের জন্য সবচেয়ে নিরাপদ পদ্ধতি
-    with open(image_path, 'rb') as f:
+    with open("image.jpg", "rb") as f:
         files = {'source': f}
         data = {
             'message': caption,
-            'access_token': token,
-            'published': 'true'
+            'access_token': os.environ.get('FB_PAGE_TOKEN')
         }
         response = requests.post(url, files=files, data=data)
-        result = response.json()
     
-    # ফাইল ডিলিট
-    if os.path.exists(image_path):
-        os.remove(image_path)
-    
-    if "id" in result:
-        logger.info(f"Success! Post ID: {result['id']}")
-        return True
-    else:
-        logger.error(f"Facebook API Error: {result}")
-        return False
-
-def main():
-    try:
-        image_path, caption = generate_image_and_data()
-        post_to_facebook(image_path, caption, os.environ.get("FB_PAGE_TOKEN"), os.environ.get("FB_PAGE_ID"))
-    except Exception as e:
-        logger.error(f"Execution failed: {e}")
+    logger.info(f"Facebook response: {response.json()}")
 
 if __name__ == "__main__":
-    main()
+    caption = generate_caption()
+    post_to_facebook(caption)
