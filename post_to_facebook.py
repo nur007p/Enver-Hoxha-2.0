@@ -1,61 +1,53 @@
 import os
 import requests
 import logging
-from google import genai
 
-# লগিং সেটআপ
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# ক্লায়েন্ট সেটআপ
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+def post_to_facebook():
+    # ফেসবুক ক্রেডেন্সিয়াল সিক্রেট থেকে লোড করা হচ্ছে
+    page_id = os.environ.get("FB_PAGE_ID")
+    token = os.environ.get("FB_PAGE_TOKEN")
 
-def generate_caption():
-    try:
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents="Write a short engaging Bengali Facebook caption for a futuristic city. Add 3 hashtags.",
-        )
-        return response.text.strip()
-    except Exception as e:
-        logger.error(f"Gemini API Error: {e}")
-        return "ভবিষ্যতের শহর! #Dhaka #AI #Future"
-
-def post_to_facebook(caption):
-    # ১. ইমেজ ডাউনলোড
-    image_url = "https://pollinations.ai/p/futuristic_dhaka_city?width=1024&height=768&nologo=true"
-    img_response = requests.get(image_url, timeout=60)
-    
-    if img_response.status_code != 200:
-        logger.error("Image download failed")
+    if not page_id or not token:
+        logger.error("Facebook ID অথবা Token পাওয়া যায়নি!")
         return
 
-    # ২. ফাইল সেভ করা (লোকাল ফাইল হিসেবে)
-    with open("image.jpg", "wb") as f:
-        f.write(img_response.content)
-
-    # ৩. ফেসবুক এপিআই আপলোড
-    url = f"https://graph.facebook.com/v21.0/{os.environ.get('FB_PAGE_ID')}/photos"
+    # ১. ছবি ডাউনলোড
+    image_url = "https://pollinations.ai/p/Futuristic_Dhaka_City_2070?width=1024&height=768&nologo=true"
+    response = requests.get(image_url, timeout=60)
     
-    # টোকেন ও ডাটা
-    params = {
-        'access_token': os.environ.get('FB_PAGE_TOKEN'),
-        'message': caption,
-        'published': 'true'
-    }
+    if response.status_code == 200:
+        with open("image.jpg", "wb") as f:
+            f.write(response.content)
+    else:
+        logger.error("ছবি ডাউনলোড ব্যর্থ হয়েছে।")
+        return
 
+    # ২. ফেসবুক এপিআই-তে পোস্ট করা
+    url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
+    
     with open("image.jpg", "rb") as f:
+        data = {
+            'message': "ভবিষ্যতের ঢাকা শহর! #FuturisticDhaka #AI #Technology",
+            'access_token': token,
+            'published': 'true'
+        }
         files = {'source': f}
-        # params আলাদাভাবে পাঠানো হচ্ছে
-        response = requests.post(url, data=params, files=files)
         
-    result = response.json()
-    logger.info(f"Facebook response: {result}")
+        resp = requests.post(url, data=data, files=files)
+        result = resp.json()
         
-    # ফাইল মুছে ফেলা
+    # ফলাফল লগ করা
+    if "id" in result:
+        logger.info(f"সফলভাবে পোস্ট হয়েছে! পোস্ট ID: {result['id']}")
+    else:
+        logger.error(f"ফেসবুক এরর: {result}")
+
+    # ৩. টেম্পোরারি ফাইল মুছে ফেলা
     if os.path.exists("image.jpg"):
         os.remove("image.jpg")
 
 if __name__ == "__main__":
-    caption = generate_caption()
-    post_to_facebook(caption)
+    post_to_facebook()
